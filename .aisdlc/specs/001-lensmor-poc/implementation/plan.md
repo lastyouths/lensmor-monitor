@@ -85,7 +85,7 @@ status: draft
 
 ### Task T1: M0 - 构建前端输入框与 Mock 报表页面
 
-- [ ] **状态**：未开始
+- [x] **状态**：完成
 
 **代码仓范围：**
 - 根项目：OneKunDay
@@ -104,15 +104,19 @@ status: draft
 **步骤 2：运行验证**
 - Run: 浏览器打开 `http://localhost:3001`
 - Expected: 正常渲染 Tailwind 样式，点击按钮有良好反馈。
+- Result: PASS. UI 渲染美观，动画流畅，符合预期。
 
 **步骤 3：提交**
 - Commit message: `[feat] M0: 实现基于 Mock 数据的报表展现层与主页输入逻辑`
 - 审计信息：
   - repo: `root`
     branch: `001-lensmor-poc`
-    commit: `<TBD>`
-    pr: `<TBD>`
-    changed_files: `<TBD>`
+    commit: `f7b2498`
+    pr: `N/A`
+    changed_files: 
+      - `src/app/mock_data.ts`
+      - `src/components/ReportCard.tsx`
+      - `src/app/page.tsx`
 
 ### Task T2: M1 - 构建极简伪异步 API Route
 
