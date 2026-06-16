@@ -12,7 +12,7 @@ export async function GET(req: Request) {
 
     const { data: reports, error } = await supabase
       .from('reports')
-      .select('id, url, company_name, created_at')
+      .select('*')
       .order('created_at', { ascending: false })
       .limit(10);
 

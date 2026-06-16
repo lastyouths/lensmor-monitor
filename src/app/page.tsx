@@ -1,18 +1,15 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { ReportData } from "./mock_data";
-import { ReportCard } from "../components/ReportCard";
+import { useState, useEffect, useMemo } from "react";
+import { CompanyTimelineView } from "../components/CompanyTimelineView";
 import { LayoutDashboard, Inbox, Settings, Plus, Search, Bell, Activity } from "lucide-react";
 
 export default function HomePage() {
   const [url, setUrl] = useState("https://supabase.com");
   const [status, setStatus] = useState<"idle" | "loading" | "success">("idle");
-  const [report, setReport] = useState<ReportData | null>(null);
   const [taskId, setTaskId] = useState<string | null>(null);
   const [history, setHistory] = useState<any[]>([]);
-
-  const [activeReportId, setActiveReportId] = useState<string | null>(null);
+  const [activeUrl, setActiveUrl] = useState<string | null>(null);
 
   const fetchHistory = async () => {
     try {
@@ -30,6 +27,22 @@ export default function HomePage() {
     fetchHistory();
   }, []);
 
+  const groupedHistory = useMemo(() => {
+    return history.reduce((acc, curr) => {
+      if (!acc[curr.url]) acc[curr.url] = [];
+      acc[curr.url].push(curr);
+      return acc;
+    }, {} as Record<string, any[]>);
+  }, [history]);
+
+  const historyGroups = useMemo(() => {
+    return Object.values(groupedHistory).map(group => ({
+      url: group[0].url,
+      company_name: group[0].company_name,
+      count: group.length,
+    }));
+  }, [groupedHistory]);
+
   useEffect(() => {
     let intervalId: NodeJS.Timeout;
 
@@ -41,11 +54,10 @@ export default function HomePage() {
         const data = await res.json();
         
         if (data.status === "completed") {
-          setReport(data.data);
+          await fetchHistory(); // 重新拉取所有历史记录（含刚刚跑完的）
           setStatus("success");
           setTaskId(null); // 停止轮询
-          fetchHistory(); // 刷新历史记录
-          setActiveReportId(null); // 刚分析完的是最新的，不是从历史点出来的
+          setActiveUrl(data.data.url); // 自动切到刚跑完的站点时间轴
         }
       } catch (err) {
         console.error("Polling error:", err);
@@ -69,7 +81,7 @@ export default function HomePage() {
     if (!url) return;
     
     setStatus("loading");
-    setReport(null);
+    setActiveUrl(null);
     setTaskId(null);
 
     try {
@@ -115,7 +127,6 @@ export default function HomePage() {
             <button className="w-full flex items-center gap-3 px-3 py-2.5 text-sm font-semibold rounded-xl bg-indigo-50 text-indigo-700 shadow-sm border border-indigo-100/50">
               <Inbox className="w-4 h-4" />
               情报收件箱
-              <span className="ml-auto bg-indigo-500 text-white text-[10px] px-2 py-0.5 rounded-full shadow-sm">1 New</span>
             </button>
             <button className="w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-xl text-slate-500 hover:bg-white/60 hover:text-slate-800 transition-colors">
               <LayoutDashboard className="w-4 h-4" />
@@ -124,42 +135,41 @@ export default function HomePage() {
           </div>
 
           <div className="mb-3 flex items-center justify-between px-2 mt-6">
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">历史情报 ({history.length})</span>
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">监控标的 ({historyGroups.length})</span>
             <button className="text-slate-400 hover:text-indigo-500 transition-colors"><Plus className="w-4 h-4" /></button>
           </div>
-          <div className="space-y-1">
-            {history.map((h) => {
-              const isActive = activeReportId === h.id;
+          <div className="space-y-1.5">
+            {historyGroups.map((g) => {
+              const isActive = activeUrl === g.url;
               return (
                 <button 
-                  key={h.id} 
+                  key={g.url} 
                   onClick={() => {
-                    setReport({
-                      companyName: h.company_name,
-                      url: h.url,
-                      summary: h.summary,
-                      companyProfile: h.company_profile,
-                      socialSentiment: h.social_sentiment,
-                      historicalTimeline: h.historical_timeline,
-                      differences: h.differences,
-                      advices: h.advices
-                    });
+                    setActiveUrl(g.url);
                     setStatus("success");
-                    setActiveReportId(h.id);
                   }}
-                  className={`w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-xl transition-colors truncate border ${
+                  className={`w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-xl transition-all border ${
                     isActive 
-                      ? 'bg-indigo-50 text-indigo-700 border-indigo-200/60 shadow-sm' 
-                      : 'bg-transparent text-slate-500 hover:bg-white/40 border-transparent'
+                      ? 'bg-white/80 text-indigo-700 border-indigo-200 shadow-sm ring-2 ring-indigo-50' 
+                      : 'bg-transparent text-slate-500 hover:bg-white/60 border-transparent hover:border-white'
                   }`}
                 >
-                  <div className={`w-2 h-2 rounded-full shrink-0 ${isActive ? 'bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.6)]' : 'bg-slate-300'}`} />
-                  <span className="truncate">{h.company_name}</span>
+                  <div className="flex items-center gap-3 truncate">
+                    <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${isActive ? 'bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.6)]' : 'bg-slate-300'}`} />
+                    <span className="truncate">{g.company_name}</span>
+                  </div>
+                  {g.count > 1 && (
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md shadow-sm border ${
+                      isActive ? 'bg-indigo-100 text-indigo-600 border-indigo-200' : 'bg-white text-slate-400 border-slate-200'
+                    }`}>
+                      {g.count}
+                    </span>
+                  )}
                 </button>
               );
             })}
-            {history.length === 0 && (
-              <div className="text-xs text-slate-400 px-3 py-2">暂无历史记录</div>
+            {historyGroups.length === 0 && (
+              <div className="text-xs text-slate-400 px-3 py-2">暂无监控对象</div>
             )}
           </div>
         </div>
@@ -176,7 +186,7 @@ export default function HomePage() {
       <main className="relative z-10 flex-1 flex flex-col overflow-hidden">
         {/* 顶部导航 */}
         <header className="h-16 shrink-0 border-b border-white/50 bg-white/40 backdrop-blur-xl flex items-center justify-between px-6 shadow-[0_4px_24px_rgba(0,0,0,0.02)]">
-          <h1 className="text-lg font-bold text-slate-800">情报收件箱 (Inbox)</h1>
+          <h1 className="text-lg font-bold text-slate-800">情报中心 (Intelligence)</h1>
           <div className="flex items-center gap-4">
             <div className="relative">
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -203,7 +213,7 @@ export default function HomePage() {
                 <div className="p-1.5 bg-indigo-100 rounded-lg text-indigo-600">
                   <Plus className="w-4 h-4" /> 
                 </div>
-                单次强制刷新采集 (POC Demo)
+                向监控队列添加新扫描任务
               </h3>
               <form onSubmit={handleAnalyze} className="relative flex items-center">
                 <input
@@ -230,7 +240,7 @@ export default function HomePage() {
                 <div className="w-20 h-20 bg-white/50 rounded-full flex items-center justify-center mb-6 shadow-sm border border-white">
                   <Inbox className="w-8 h-8 text-slate-300" />
                 </div>
-                <p className="font-medium text-slate-500">收件箱已清空。请在上方输入 URL 触发一次新的采集任务。</p>
+                <p className="font-medium text-slate-500">收件箱已清空。请在上方输入 URL 或点击左侧监控标的。</p>
               </div>
             )}
 
@@ -247,25 +257,14 @@ export default function HomePage() {
               </div>
             )}
 
-            {status === "success" && report && (
-              <div className="space-y-6 animate-in fade-in slide-in-from-top-8 duration-700">
-                <div className="flex items-center justify-between pb-2 border-b border-slate-200/50">
-                  <h2 className="text-xl font-bold text-slate-800 flex items-center gap-3">
-                    <span className="relative flex h-3 w-3">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-3 w-3 bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.8)]"></span>
-                    </span>
-                    刚刚到达的新情报
-                  </h2>
-                  <span className="text-xs font-bold tracking-wider uppercase text-slate-400 bg-white/60 px-3 py-1 rounded-full border border-white">Just now</span>
-                </div>
-                <ReportCard data={report} />
-              </div>
+            {/* 核心：如果有了 activeUrl，展示这个站点的聚合时间轴 */}
+            {status === "success" && activeUrl && groupedHistory[activeUrl] && (
+              <CompanyTimelineView reports={groupedHistory[activeUrl]} />
             )}
+            
           </div>
         </div>
       </main>
     </div>
   );
 }
-
