@@ -2,7 +2,13 @@ import { NextResponse } from "next/server";
 import { mockReportData, ReportData } from "../../mock_data";
 import { z } from "zod";
 import { generateObject } from "ai";
-import { openai } from "@ai-sdk/openai";
+import { createOpenAI } from "@ai-sdk/openai";
+
+// 初始化 OpenAI 客户端
+const customOpenAI = createOpenAI({
+  apiKey: process.env.OPENAI_API_KEY || "",
+  baseURL: process.env.OPENAI_BASE_URL || "https://api.openai.com/v1",
+});
 
 // 全局任务存储，伪异步核心 (在开发和无状态边缘环境中会丢失，只适用于 POC)
 const globalStore = global as unknown as { taskStore: Map<string, any> };
@@ -37,8 +43,8 @@ const reportSchema = z.object({
     id: z.string(),
     type: z.enum(["added", "removed", "modified"]),
     category: z.enum(["pricing", "marketing", "feature", "operation"]),
-    oldContent: z.string().optional(),
-    newContent: z.string().optional(),
+    oldContent: z.string(),
+    newContent: z.string(),
     reasoning: z.string(),
   })),
   advices: z.array(z.object({
@@ -52,9 +58,11 @@ const reportSchema = z.object({
 async function processAnalysisTask(taskId: string, url: string) {
   try {
     console.log(`[Task ${taskId}] 1. 开始使用 Jina Reader 抓取: ${url}`);
+    console.log(`[Task ${taskId}] 当前 API KEY 长度:`, process.env.OPENAI_API_KEY?.length);
+    console.log(`[Task ${taskId}] 当前 BASE URL:`, process.env.OPENAI_BASE_URL);
     
-    // 如果没有配 Key，直接走 Mock 逻辑
-    if (!process.env.OPENAI_API_KEY) {
+    // 如果没有配 Key (长度为 0 或 undefined)，直接走 Mock 逻辑
+    if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY.trim() === "") {
       console.log(`[Task ${taskId}] ⚠️ 未检测到 OPENAI_API_KEY，降级为使用 Mock 数据。`);
       await new Promise(resolve => setTimeout(resolve, 3000));
       taskStore.set(taskId, { status: "completed", data: { ...mockReportData, url } });
@@ -78,8 +86,12 @@ async function processAnalysisTask(taskId: string, url: string) {
 
     console.log(`[Task ${taskId}] 2. 抓取成功 (截取 ${truncatedContent.length} 字符)。开始调用大模型分析...`);
 
+    const modelName = process.env.OPENAI_MODEL && process.env.OPENAI_MODEL.trim() !== "" 
+      ? process.env.OPENAI_MODEL.trim() 
+      : "gpt-4o-mini";
+
     const { object } = await generateObject({
-      model: openai("gpt-4o-mini"), // 使用经济且快速的模型
+      model: customOpenAI(modelName), // 使用自定义实例
       schema: reportSchema,
       prompt: `
         你是一个资深的竞品分析专家。我现在给你一个目标网站最新的网页内容（Markdown格式）。
