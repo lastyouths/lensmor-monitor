@@ -12,6 +12,8 @@ export default function HomePage() {
   const [taskId, setTaskId] = useState<string | null>(null);
   const [history, setHistory] = useState<any[]>([]);
 
+  const [activeReportId, setActiveReportId] = useState<string | null>(null);
+
   const fetchHistory = async () => {
     try {
       const res = await fetch("/api/reports");
@@ -43,6 +45,7 @@ export default function HomePage() {
           setStatus("success");
           setTaskId(null); // 停止轮询
           fetchHistory(); // 刷新历史记录
+          setActiveReportId(null); // 刚分析完的是最新的，不是从历史点出来的
         }
       } catch (err) {
         console.error("Polling error:", err);
@@ -125,12 +128,36 @@ export default function HomePage() {
             <button className="text-slate-400 hover:text-indigo-500 transition-colors"><Plus className="w-4 h-4" /></button>
           </div>
           <div className="space-y-1">
-            {history.map((h) => (
-              <button key={h.id} className="w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-xl text-slate-500 hover:bg-white/40 transition-colors truncate">
-                <div className="w-2 h-2 rounded-full bg-slate-300 shrink-0" />
-                <span className="truncate">{h.company_name}</span>
-              </button>
-            ))}
+            {history.map((h) => {
+              const isActive = activeReportId === h.id;
+              return (
+                <button 
+                  key={h.id} 
+                  onClick={() => {
+                    setReport({
+                      companyName: h.company_name,
+                      url: h.url,
+                      summary: h.summary,
+                      companyProfile: h.company_profile,
+                      socialSentiment: h.social_sentiment,
+                      historicalTimeline: h.historical_timeline,
+                      differences: h.differences,
+                      advices: h.advices
+                    });
+                    setStatus("success");
+                    setActiveReportId(h.id);
+                  }}
+                  className={`w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-xl transition-colors truncate border ${
+                    isActive 
+                      ? 'bg-indigo-50 text-indigo-700 border-indigo-200/60 shadow-sm' 
+                      : 'bg-transparent text-slate-500 hover:bg-white/40 border-transparent'
+                  }`}
+                >
+                  <div className={`w-2 h-2 rounded-full shrink-0 ${isActive ? 'bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.6)]' : 'bg-slate-300'}`} />
+                  <span className="truncate">{h.company_name}</span>
+                </button>
+              );
+            })}
             {history.length === 0 && (
               <div className="text-xs text-slate-400 px-3 py-2">暂无历史记录</div>
             )}
