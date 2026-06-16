@@ -25,11 +25,18 @@ export default function HomePage() {
   };
 
   return (
-    <div className="flex h-screen bg-black text-white overflow-hidden">
-      {/* 左侧边栏 - 模拟真实的竞品管理菜单 */}
-      <aside className="w-64 shrink-0 border-r border-zinc-800 bg-zinc-950 flex flex-col hidden md:flex">
-        <div className="h-16 flex items-center px-6 border-b border-zinc-800">
-          <div className="flex items-center gap-2 text-blue-500 font-bold text-lg tracking-wider">
+    <div className="flex h-screen bg-slate-50 text-slate-900 overflow-hidden selection:bg-indigo-100 selection:text-indigo-900">
+      {/* 动态唯美光晕背景 */}
+      <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden">
+        <div className="absolute -top-[20%] -left-[10%] w-[50%] h-[50%] rounded-full bg-gradient-to-br from-indigo-200/40 to-purple-200/40 blur-[100px]" />
+        <div className="absolute top-[20%] -right-[10%] w-[40%] h-[60%] rounded-full bg-gradient-to-bl from-blue-200/40 to-cyan-200/40 blur-[120px]" />
+        <div className="absolute -bottom-[20%] left-[20%] w-[60%] h-[50%] rounded-full bg-gradient-to-tr from-rose-200/30 to-orange-200/30 blur-[100px]" />
+      </div>
+
+      {/* 左侧边栏 - 毛玻璃设计 */}
+      <aside className="relative z-10 w-64 shrink-0 border-r border-white/50 bg-white/40 backdrop-blur-xl flex flex-col hidden md:flex shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
+        <div className="h-16 flex items-center px-6 border-b border-white/50">
+          <div className="flex items-center gap-2 text-indigo-600 font-bold text-lg tracking-wider">
             <Activity className="w-6 h-6" />
             LENSMOR
           </div>
@@ -37,39 +44,39 @@ export default function HomePage() {
         
         <div className="p-4 flex-1 overflow-y-auto">
           <div className="space-y-1 mb-8">
-            <button className="w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg bg-blue-600/10 text-blue-400">
+            <button className="w-full flex items-center gap-3 px-3 py-2.5 text-sm font-semibold rounded-xl bg-indigo-50 text-indigo-700 shadow-sm border border-indigo-100/50">
               <Inbox className="w-4 h-4" />
               情报收件箱
-              <span className="ml-auto bg-blue-600 text-white text-[10px] px-2 py-0.5 rounded-full">1 New</span>
+              <span className="ml-auto bg-indigo-500 text-white text-[10px] px-2 py-0.5 rounded-full shadow-sm">1 New</span>
             </button>
-            <button className="w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200 transition-colors">
+            <button className="w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-xl text-slate-500 hover:bg-white/60 hover:text-slate-800 transition-colors">
               <LayoutDashboard className="w-4 h-4" />
               全局看板
             </button>
           </div>
 
-          <div className="mb-2 flex items-center justify-between px-2">
-            <span className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">监控中 (3)</span>
-            <button className="text-zinc-500 hover:text-zinc-300"><Plus className="w-4 h-4" /></button>
+          <div className="mb-3 flex items-center justify-between px-2">
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">监控中 (3)</span>
+            <button className="text-slate-400 hover:text-indigo-500 transition-colors"><Plus className="w-4 h-4" /></button>
           </div>
           <div className="space-y-1">
-            <button className="w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg bg-zinc-900 text-zinc-200 border border-zinc-800">
-              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+            <button className="w-full flex items-center gap-3 px-3 py-2 text-sm rounded-xl bg-white/60 text-slate-800 border border-white/60 shadow-sm font-medium">
+              <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.6)]" />
               Supabase
             </button>
-            <button className="w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg text-zinc-400 hover:bg-zinc-900 transition-colors">
-              <div className="w-2 h-2 rounded-full bg-zinc-600" />
+            <button className="w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-xl text-slate-500 hover:bg-white/40 transition-colors">
+              <div className="w-2 h-2 rounded-full bg-slate-300" />
               Vercel
             </button>
-            <button className="w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg text-zinc-400 hover:bg-zinc-900 transition-colors">
-              <div className="w-2 h-2 rounded-full bg-zinc-600" />
+            <button className="w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-xl text-slate-500 hover:bg-white/40 transition-colors">
+              <div className="w-2 h-2 rounded-full bg-slate-300" />
               Stripe
             </button>
           </div>
         </div>
         
-        <div className="p-4 border-t border-zinc-800">
-          <button className="w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg text-zinc-400 hover:bg-zinc-900 transition-colors">
+        <div className="p-4 border-t border-white/50">
+          <button className="w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-xl text-slate-500 hover:bg-white/60 hover:text-slate-800 transition-colors">
             <Settings className="w-4 h-4" />
             设置
           </button>
@@ -77,34 +84,36 @@ export default function HomePage() {
       </aside>
 
       {/* 右侧主内容区 */}
-      <main className="flex-1 flex flex-col overflow-hidden relative">
+      <main className="relative z-10 flex-1 flex flex-col overflow-hidden">
         {/* 顶部导航 */}
-        <header className="h-16 shrink-0 border-b border-zinc-800 bg-zinc-950/50 backdrop-blur-md flex items-center justify-between px-6 z-10">
-          <h1 className="text-lg font-semibold text-zinc-200">情报收件箱 (Inbox)</h1>
+        <header className="h-16 shrink-0 border-b border-white/50 bg-white/40 backdrop-blur-xl flex items-center justify-between px-6 shadow-[0_4px_24px_rgba(0,0,0,0.02)]">
+          <h1 className="text-lg font-bold text-slate-800">情报收件箱 (Inbox)</h1>
           <div className="flex items-center gap-4">
             <div className="relative">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input 
                 type="text" 
                 placeholder="在报告中搜索..." 
-                className="pl-9 pr-4 py-1.5 bg-zinc-900 border border-zinc-800 rounded-full text-sm focus:outline-none focus:border-zinc-600 text-zinc-300 w-64"
+                className="pl-9 pr-4 py-2 bg-white/50 border border-white/60 rounded-full text-sm font-medium focus:outline-none focus:border-indigo-300 focus:bg-white text-slate-700 w-64 shadow-sm transition-all placeholder-slate-400"
               />
             </div>
-            <button className="relative text-zinc-400 hover:text-zinc-200">
+            <button className="relative p-2 text-slate-500 hover:text-slate-800 hover:bg-white/50 rounded-full transition-colors">
               <Bell className="w-5 h-5" />
-              <span className="absolute top-0 right-0 w-2 h-2 bg-blue-500 rounded-full border border-zinc-950" />
+              <span className="absolute top-1.5 right-2 w-2 h-2 bg-rose-500 rounded-full border-2 border-white" />
             </button>
           </div>
         </header>
 
         {/* 内容滚动区 */}
-        <div className="flex-1 overflow-y-auto p-6 md:p-8">
+        <div className="flex-1 overflow-y-auto p-6 md:p-8 scroll-smooth">
           <div className="max-w-4xl mx-auto">
             
             {/* POC 专属：手动触发监控区块 */}
-            <div className="mb-10 bg-zinc-900/40 border border-zinc-800/60 rounded-xl p-5 shadow-sm">
-              <h3 className="text-sm font-medium text-zinc-300 mb-3 flex items-center gap-2">
-                <Plus className="w-4 h-4 text-blue-400" /> 
+            <div className="mb-10 bg-white/60 backdrop-blur-md border border-white rounded-2xl p-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
+              <h3 className="text-sm font-bold text-slate-700 mb-4 flex items-center gap-2">
+                <div className="p-1.5 bg-indigo-100 rounded-lg text-indigo-600">
+                  <Plus className="w-4 h-4" /> 
+                </div>
                 单次强制刷新采集 (POC Demo)
               </h3>
               <form onSubmit={handleAnalyze} className="relative flex items-center">
@@ -113,14 +122,14 @@ export default function HomePage() {
                   value={url}
                   onChange={(e) => setUrl(e.target.value)}
                   placeholder="输入竞品网站 URL，如 https://supabase.com"
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-white placeholder-zinc-500 shadow-inner focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all"
+                  className="w-full rounded-xl border border-slate-200/60 bg-white/80 px-5 py-4 text-sm font-medium text-slate-800 placeholder-slate-400 shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all"
                   required
                   disabled={status === "loading"}
                 />
                 <button
                   type="submit"
                   disabled={status === "loading"}
-                  className="absolute right-1.5 rounded-md bg-blue-600 px-4 py-1.5 text-sm font-medium text-white transition-all hover:bg-blue-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="absolute right-2 rounded-lg bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white transition-all hover:bg-slate-800 hover:shadow-md hover:-translate-y-0.5 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
                 >
                   {status === "loading" ? "任务排队中..." : "开始采集与分析"}
                 </button>
@@ -128,35 +137,39 @@ export default function HomePage() {
             </div>
 
             {status === "idle" && (
-              <div className="flex flex-col items-center justify-center py-20 text-zinc-500">
-                <Inbox className="w-12 h-12 mb-4 opacity-20" />
-                <p>收件箱已清空。请在上方输入 URL 触发一次新的采集任务。</p>
+              <div className="flex flex-col items-center justify-center py-24 text-slate-400">
+                <div className="w-20 h-20 bg-white/50 rounded-full flex items-center justify-center mb-6 shadow-sm border border-white">
+                  <Inbox className="w-8 h-8 text-slate-300" />
+                </div>
+                <p className="font-medium text-slate-500">收件箱已清空。请在上方输入 URL 触发一次新的采集任务。</p>
               </div>
             )}
 
             {status === "loading" && (
-              <div className="py-20 flex flex-col items-center justify-center gap-5 text-zinc-400 animate-pulse">
+              <div className="py-24 flex flex-col items-center justify-center gap-6 animate-pulse">
                 <div className="relative">
-                  <div className="h-16 w-16 rounded-full border-4 border-zinc-800 border-t-blue-500 animate-spin" />
-                  <Activity className="w-6 h-6 absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-blue-400" />
+                  <div className="h-20 w-20 rounded-full border-4 border-slate-100 border-t-indigo-500 animate-spin shadow-lg" />
+                  <Activity className="w-6 h-6 absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-indigo-500" />
                 </div>
-                <div className="text-center space-y-1">
-                  <p className="font-medium text-zinc-300">后台异步队列正在处理...</p>
-                  <p className="text-sm">Jina Reader 提取页网快照 / LLM 差异比对中 / 生成建议中</p>
+                <div className="text-center space-y-2">
+                  <p className="font-bold text-slate-700 text-lg">后台异步队列正在处理...</p>
+                  <p className="text-sm font-medium text-slate-500">Jina Reader 提取网页快照 / LLM 差异比对中 / 生成建议中</p>
                 </div>
               </div>
             )}
 
             {status === "success" && report && (
-              <div className="space-y-4 animate-in fade-in slide-in-from-top-4 duration-500">
-                <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
-                  <h2 className="text-xl font-semibold flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-blue-500" /> 
+              <div className="space-y-6 animate-in fade-in slide-in-from-top-8 duration-700">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-200/50">
+                  <h2 className="text-xl font-bold text-slate-800 flex items-center gap-3">
+                    <span className="relative flex h-3 w-3">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-3 w-3 bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.8)]"></span>
+                    </span>
                     刚刚到达的新情报
                   </h2>
-                  <span className="text-xs font-mono text-zinc-500">Just now</span>
+                  <span className="text-xs font-bold tracking-wider uppercase text-slate-400 bg-white/60 px-3 py-1 rounded-full border border-white">Just now</span>
                 </div>
-                {/* 这里的 ReportCard 就是我们上一步做的高颜值卡片 */}
                 <ReportCard data={report} />
               </div>
             )}

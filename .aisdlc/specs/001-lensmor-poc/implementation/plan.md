@@ -97,6 +97,7 @@ status: draft
 **验收点：**
 - 页面有输入框和一个“开始监控”按钮。
 - 点击后，假装加载 3 秒，然后展示包含 Mock Diff 数据和 Mock 行动建议的精美卡片。
+- (补充) 整体页面布局调整为带侧边栏的 Dashboard 结构。
 
 **步骤 1：写最少实现**
 - 修改点：实现 `ReportCard.tsx`（左右分栏的差异对比 UI），更新 `page.tsx` 使用本地 state 控制展现流程。
@@ -104,14 +105,14 @@ status: draft
 **步骤 2：运行验证**
 - Run: 浏览器打开 `http://localhost:3001`
 - Expected: 正常渲染 Tailwind 样式，点击按钮有良好反馈。
-- Result: PASS. UI 渲染美观，动画流畅，符合预期。
+- Result: PASS. UI 渲染美观，动画流畅，且已外挂 Dashboard 侧边栏，符合产品预期。
 
 **步骤 3：提交**
-- Commit message: `[feat] M0: 实现基于 Mock 数据的报表展现层与主页输入逻辑`
+- Commit message: `[feat] M0: 实现基于 Mock 数据的报表展现层与主页输入逻辑` (及后续 Dashboard Layout commit)
 - 审计信息：
   - repo: `root`
     branch: `001-lensmor-poc`
-    commit: `f7b2498`
+    commit: `f7b2498, 94811cc`
     pr: `N/A`
     changed_files: 
       - `src/app/mock_data.ts`
