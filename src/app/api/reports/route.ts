@@ -10,11 +10,21 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { data: reports, error } = await supabase
+    const { searchParams } = new URL(req.url);
+    const targetUrl = searchParams.get('url');
+
+    let query = supabase
       .from('reports')
       .select('*')
-      .order('created_at', { ascending: false })
-      .limit(10);
+      .order('created_at', { ascending: false });
+
+    if (targetUrl) {
+      query = query.eq('url', targetUrl);
+    } else {
+      query = query.limit(10); // default limit if not filtering by url
+    }
+
+    const { data: reports, error } = await query;
 
     if (error) {
       throw error;

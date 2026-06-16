@@ -163,6 +163,12 @@ async function saveToDatabase(taskId: string, finalData: ReportData, userId?: st
       console.error(`[Task ${taskId}] 保存到数据库失败:`, dbError);
     } else {
       console.log(`[Task ${taskId}] 5. 成功保存到数据库！`);
+      // 更新 monitor_targets 的 last_run_at
+      await supabase
+        .from('monitor_targets')
+        .update({ last_run_at: new Date().toISOString() })
+        .eq('user_id', userId)
+        .eq('url', finalData.url);
     }
   }
 }
