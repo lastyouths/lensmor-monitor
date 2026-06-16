@@ -121,7 +121,7 @@ status: draft
 
 ### Task T2: M1 - 构建极简伪异步 API Route
 
-- [ ] **状态**：未开始
+- [x] **状态**：完成
 
 **代码仓范围：**
 - 根项目：OneKunDay
@@ -139,15 +139,17 @@ status: draft
 **步骤 2：运行验证**
 - Run: `curl -X POST http://localhost:3001/api/analyze` 然后连续 `curl GET`。
 - Expected: 刚开始返回 pending，几秒后返回 completed。
+- Result: PASS. `curl` 验证通过，成功实现状态机的伪异步。
 
 **步骤 3：提交**
 - Commit message: `[feat] M1: 建立 Next.js 内存级的伪异步任务调度接口`
 - 审计信息：
   - repo: `root`
     branch: `001-lensmor-poc`
-    commit: `<TBD>`
-    pr: `<TBD>`
-    changed_files: `<TBD>`
+    commit: `3383c63`
+    pr: `N/A`
+    changed_files: 
+      - `src/app/api/analyze/route.ts`
 
 ### Task T3: M1.5 - 前后端联调替换 Mock
 

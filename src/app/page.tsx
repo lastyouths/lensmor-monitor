@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { mockReportData, ReportData } from "./mock_data";
+import { useState, useEffect } from "react";
+import { ReportData } from "./mock_data";
 import { ReportCard } from "../components/ReportCard";
 import { LayoutDashboard, Inbox, Settings, Plus, Search, Bell, Activity } from "lucide-react";
 
@@ -9,19 +9,66 @@ export default function HomePage() {
   const [url, setUrl] = useState("https://supabase.com");
   const [status, setStatus] = useState<"idle" | "loading" | "success">("idle");
   const [report, setReport] = useState<ReportData | null>(null);
+  const [taskId, setTaskId] = useState<string | null>(null);
 
-  const handleAnalyze = (e: React.FormEvent) => {
+  useEffect(() => {
+    let intervalId: NodeJS.Timeout;
+
+    const pollTask = async () => {
+      if (!taskId) return;
+      try {
+        const res = await fetch(`/api/analyze?taskId=${taskId}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        
+        if (data.status === "completed") {
+          setReport(data.data);
+          setStatus("success");
+          setTaskId(null); // 停止轮询
+        }
+      } catch (err) {
+        console.error("Polling error:", err);
+      }
+    };
+
+    if (taskId && status === "loading") {
+      // 立即查一次
+      pollTask();
+      // 然后每 2 秒轮询一次
+      intervalId = setInterval(pollTask, 2000);
+    }
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [taskId, status]);
+
+  const handleAnalyze = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!url) return;
     
     setStatus("loading");
     setReport(null);
+    setTaskId(null);
 
-    // 模拟等待异步队列的时间
-    setTimeout(() => {
-      setReport(mockReportData);
-      setStatus("success");
-    }, 3000);
+    try {
+      const res = await fetch("/api/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+      const data = await res.json();
+      if (data.taskId) {
+        setTaskId(data.taskId);
+      } else {
+        setStatus("idle");
+        alert("Failed to start analysis task");
+      }
+    } catch (err) {
+      console.error(err);
+      setStatus("idle");
+      alert("Failed to start analysis task");
+    }
   };
 
   return (
@@ -179,3 +226,4 @@ export default function HomePage() {
     </div>
   );
 }
+
