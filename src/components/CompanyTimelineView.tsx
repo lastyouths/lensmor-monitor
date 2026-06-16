@@ -4,9 +4,27 @@ import React, { useState } from "react";
 import { ReportCard } from "./ReportCard";
 import { History, ChevronDown, ChevronRight } from "lucide-react";
 
-export function CompanyTimelineView({ reports }: { reports: any[] }) {
+export function CompanyTimelineView({ reports, onMarkRead }: { reports: any[], onMarkRead: (id: string) => void }) {
   const latest = reports[0];
   const [expandedId, setExpandedId] = useState<string | null>(latest?.id || null);
+
+  // 初始化时，如果最新的一条是未读的，且默认展开了，就自动标记为已读
+  React.useEffect(() => {
+    if (latest && !latest.is_read && expandedId === latest.id) {
+      onMarkRead(latest.id);
+    }
+  }, [latest, expandedId, onMarkRead]);
+
+  const handleExpand = (reportId: string, isCurrentlyExpanded: boolean, isRead: boolean) => {
+    if (!isCurrentlyExpanded) {
+      setExpandedId(reportId);
+      if (!isRead) {
+        onMarkRead(reportId);
+      }
+    } else {
+      setExpandedId(null);
+    }
+  };
 
   if (!latest) return null;
 
@@ -46,7 +64,7 @@ export function CompanyTimelineView({ reports }: { reports: any[] }) {
               }`}>
                 <div 
                   className="p-5 flex items-center justify-between"
-                  onClick={() => setExpandedId(isExpanded ? null : report.id)}
+                  onClick={() => handleExpand(report.id, isExpanded, report.is_read)}
                 >
                   <div className="flex items-center gap-4">
                     <span className={`text-sm font-bold font-mono px-3 py-1.5 rounded-lg border ${
@@ -54,8 +72,13 @@ export function CompanyTimelineView({ reports }: { reports: any[] }) {
                     }`}>
                       {dateStr}
                     </span>
-                    <span className={`text-base font-semibold ${index === 0 ? 'text-slate-800' : 'text-slate-600'} line-clamp-1 max-w-md`}>
+                    <span className={`text-base font-semibold ${index === 0 ? 'text-slate-800' : 'text-slate-600'} line-clamp-1 max-w-md flex items-center gap-2`}>
                       {index === 0 ? '✨ 最新情报快照' : '历史情报快照'}
+                      {!report.is_read && (
+                        <span className="px-2 py-0.5 bg-rose-100 text-rose-600 text-[10px] font-bold uppercase tracking-wider rounded-full border border-rose-200 animate-pulse">
+                          New
+                        </span>
+                      )}
                     </span>
                   </div>
                   <div className={`text-slate-400 p-1.5 rounded-full transition-colors ${isExpanded ? 'bg-indigo-50 text-indigo-500' : 'group-hover:text-indigo-400'}`}>

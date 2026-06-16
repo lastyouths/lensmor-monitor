@@ -12,14 +12,19 @@ export async function GET(req: Request) {
 
     const { data: targets, error } = await supabase
       .from('monitor_targets')
-      .select('*')
+      .select('*, reports(id, is_read)')
       .order('created_at', { ascending: false });
 
     if (error) {
       throw error;
     }
 
-    return NextResponse.json({ targets });
+    const targetsWithUnread = targets.map((t: any) => ({
+      ...t,
+      unread_count: t.reports?.filter((r: any) => !r.is_read).length || 0
+    }));
+
+    return NextResponse.json({ targets: targetsWithUnread });
   } catch (err) {
     console.error("Fetch targets error:", err);
     return NextResponse.json({ error: "Failed to fetch targets" }, { status: 500 });

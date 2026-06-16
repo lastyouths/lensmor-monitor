@@ -126,6 +126,19 @@ export default function HomePage() {
     }
   };
 
+  const handleMarkRead = async (reportId: string) => {
+    try {
+      await fetch('/api/reports', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: reportId, is_read: true })
+      });
+      setReports(prev => prev.map(r => r.id === reportId ? { ...r, is_read: true } : r));
+      fetchTargets(); // 刷新侧边栏的新消息计数
+    } catch (e) {
+      console.error(e);
+    }
+  };
   const handleForceRun = async () => {
     if (!activeTarget) return;
     setStatus("loading");
@@ -207,7 +220,14 @@ export default function HomePage() {
                     <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${isActive && !isPaused ? 'bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.6)]' : isPaused ? 'bg-slate-300' : 'bg-emerald-400'}`} />
                     <span className="truncate">{t.name}</span>
                   </div>
-                  {isPaused && <Pause className="w-3 h-3 text-slate-400" />}
+                  <div className="flex items-center gap-1.5">
+                    {t.unread_count > 0 && (
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md shadow-sm border bg-rose-500 text-white border-rose-600">
+                        {t.unread_count} New
+                      </span>
+                    )}
+                    {isPaused && <Pause className="w-3 h-3 text-slate-400" />}
+                  </div>
                 </button>
               );
             })}
@@ -340,7 +360,7 @@ export default function HomePage() {
 
                 {/* 时间轴视图 */}
                 {reports.length > 0 ? (
-                  <CompanyTimelineView reports={reports} />
+                  <CompanyTimelineView reports={reports} onMarkRead={handleMarkRead} />
                 ) : status !== "loading" ? (
                   <div className="py-20 text-center border border-dashed border-slate-300 rounded-2xl bg-white/20">
                     <p className="text-slate-500 font-medium">该任务还没有采集记录。</p>
