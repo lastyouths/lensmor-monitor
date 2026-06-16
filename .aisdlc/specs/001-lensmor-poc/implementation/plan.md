@@ -153,7 +153,7 @@ status: draft
 
 ### Task T3: M1.5 - 前后端联调替换 Mock
 
-- [ ] **状态**：未开始
+- [x] **状态**：完成
 
 **代码仓范围：**
 - 根项目：OneKunDay
@@ -170,15 +170,88 @@ status: draft
 **步骤 2：运行验证**
 - Run: 点击页面按钮。
 - Expected: Network 面板看到 `/api/analyze` 轮询，页面 Loading 不卡顿。
+- Result: PASS. Frontend now correctly hits POST /api/analyze and polls GET /api/analyze every 2 seconds.
 
 **步骤 3：提交**
 - Commit message: `[feat] M1.5: 前端改为轮询真实接口展示 Mock 数据`
 - 审计信息：
   - repo: `root`
     branch: `001-lensmor-poc`
+    commit: `c29cab8`
+    pr: `N/A`
+    changed_files: 
+      - `src/app/page.tsx`
+
+### Task T4: M2 - 全链路贯通 (Jina 抓取 + LLM 分析)
+
+- [ ] **状态**：未开始
+
+**代码仓范围：**
+- 根项目：OneKunDay
+
+**文件：**
+- 修改：`src/app/api/analyze/route.ts`
+- 修改/创建：根据需要创建单独的 LLM 调用服务文件或直接在 route.ts 中
+
+**验收点：**
+- 能够通过 `r.jina.ai` 获取指定 URL 的 Markdown 格式内容。
+- 将获取到的 Markdown 内容提交给大模型 (OpenAI 或 Anthropic) 提取摘要、执行变更对比及生成行动建议。
+- 大模型返回 JSON 数据，符合 `ReportData` 类型结构。
+- 将生成的分析数据存入 `taskStore` 的 `completed` 状态中。
+
+**步骤 1：写最少实现**
+- 修改点：在 POST 处理逻辑中，增加 `fetch` 到 Jina 的逻辑，然后对接 `@ai-sdk/openai` 等 SDK 或者直接用原生的 fetch 调用 OpenAI 的 `/v1/chat/completions` 生成并强制返回结构化的 JSON 数据。
+
+**步骤 2：运行验证**
+- Run: 在前端页面输入一个真实的网址（如 `https://vercel.com`），点击开始监控。
+- Expected: 几秒到几十秒后，页面刷新出针对该新网站的独家分析卡片。
+
+**步骤 3：提交**
+- Commit message: `[feat] M2: 接入 Jina 页面抓取与真实大语言模型智能分析`
+- 审计信息：
+  - repo: `root`
+    branch: `001-lensmor-poc`
     commit: `<TBD>`
     pr: `<TBD>`
     changed_files: `<TBD>`
+
+### Task T5: M3 - 接入 Supabase Auth 与数据库体系
+
+- [x] **状态**：完成
+
+**代码仓范围：**
+- 根项目：OneKunDay
+
+**文件：**
+- 创建：`src/utils/supabase/server.ts`, `src/utils/supabase/client.ts`, `src/utils/supabase/middleware.ts`
+- 创建：`src/app/login/page.tsx`, `src/app/login/actions.ts`
+- 修改：`src/middleware.ts` (路由保护), `package.json`
+
+**验收点：**
+- 安装 `@supabase/supabase-js` 与 `@supabase/ssr`。
+- 构建基础的登录页面 (`/login`)，支持邮箱密码登录。
+- 配置 Next.js Middleware，未登录用户访问 Dashboard 会被重定向到 `/login`。
+- 修改环境变量预留 `NEXT_PUBLIC_SUPABASE_URL` 和 `NEXT_PUBLIC_SUPABASE_ANON_KEY`。
+
+**步骤 1：写最少实现**
+- 修改点：按照 Supabase 官方 Next.js SSR 指南，编写 Auth 相关的 Client/Server 辅助函数，并搭建极简登录页与拦截器。
+
+**步骤 2：运行验证**
+- Run: 未登录状态下访问 `http://localhost:3000/`。
+- Expected: 自动跳转到 `/login`。
+- Result: PASS. Supabase SSR auth is integrated and the login page matches the visual design.
+
+**步骤 3：提交**
+- Commit message: `[feat] M3: 引入 Supabase SSR Auth 体系，实现正式的身份鉴权隔离`
+- 审计信息：
+  - repo: `root`
+    branch: `001-lensmor-poc`
+    commit: `<TBD>`
+    pr: `N/A`
+    changed_files: 
+      - `src/utils/supabase/*`
+      - `src/app/login/*`
+      - `src/middleware.ts`
 
 ---
 
