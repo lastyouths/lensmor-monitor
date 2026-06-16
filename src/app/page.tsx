@@ -10,6 +10,23 @@ export default function HomePage() {
   const [status, setStatus] = useState<"idle" | "loading" | "success">("idle");
   const [report, setReport] = useState<ReportData | null>(null);
   const [taskId, setTaskId] = useState<string | null>(null);
+  const [history, setHistory] = useState<any[]>([]);
+
+  const fetchHistory = async () => {
+    try {
+      const res = await fetch("/api/reports");
+      if (res.ok) {
+        const data = await res.json();
+        setHistory(data.reports || []);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  useEffect(() => {
+    fetchHistory();
+  }, []);
 
   useEffect(() => {
     let intervalId: NodeJS.Timeout;
@@ -25,6 +42,7 @@ export default function HomePage() {
           setReport(data.data);
           setStatus("success");
           setTaskId(null); // 停止轮询
+          fetchHistory(); // 刷新历史记录
         }
       } catch (err) {
         console.error("Polling error:", err);
@@ -102,23 +120,20 @@ export default function HomePage() {
             </button>
           </div>
 
-          <div className="mb-3 flex items-center justify-between px-2">
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">监控中 (3)</span>
+          <div className="mb-3 flex items-center justify-between px-2 mt-6">
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">历史情报 ({history.length})</span>
             <button className="text-slate-400 hover:text-indigo-500 transition-colors"><Plus className="w-4 h-4" /></button>
           </div>
           <div className="space-y-1">
-            <button className="w-full flex items-center gap-3 px-3 py-2 text-sm rounded-xl bg-white/60 text-slate-800 border border-white/60 shadow-sm font-medium">
-              <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.6)]" />
-              Supabase
-            </button>
-            <button className="w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-xl text-slate-500 hover:bg-white/40 transition-colors">
-              <div className="w-2 h-2 rounded-full bg-slate-300" />
-              Vercel
-            </button>
-            <button className="w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-xl text-slate-500 hover:bg-white/40 transition-colors">
-              <div className="w-2 h-2 rounded-full bg-slate-300" />
-              Stripe
-            </button>
+            {history.map((h) => (
+              <button key={h.id} className="w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-xl text-slate-500 hover:bg-white/40 transition-colors truncate">
+                <div className="w-2 h-2 rounded-full bg-slate-300 shrink-0" />
+                <span className="truncate">{h.company_name}</span>
+              </button>
+            ))}
+            {history.length === 0 && (
+              <div className="text-xs text-slate-400 px-3 py-2">暂无历史记录</div>
+            )}
           </div>
         </div>
         

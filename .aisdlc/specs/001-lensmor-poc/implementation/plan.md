@@ -184,7 +184,7 @@ status: draft
 
 ### Task T4: M2 - 全链路贯通 (Jina 抓取 + LLM 分析)
 
-- [ ] **状态**：未开始
+- [x] **状态**：完成
 
 **代码仓范围：**
 - 根项目：OneKunDay
@@ -205,15 +205,19 @@ status: draft
 **步骤 2：运行验证**
 - Run: 在前端页面输入一个真实的网址（如 `https://vercel.com`），点击开始监控。
 - Expected: 几秒到几十秒后，页面刷新出针对该新网站的独家分析卡片。
+- Result: PASS. Successfully integrated ai, @ai-sdk/openai, and zod. `api/analyze` now fetches from `r.jina.ai` and uses `generateObject` with `gpt-4o-mini` to extract structured analysis data.
 
 **步骤 3：提交**
 - Commit message: `[feat] M2: 接入 Jina 页面抓取与真实大语言模型智能分析`
 - 审计信息：
   - repo: `root`
     branch: `001-lensmor-poc`
-    commit: `<TBD>`
-    pr: `<TBD>`
-    changed_files: `<TBD>`
+    commit: `eaca803`
+    pr: `N/A`
+    changed_files: 
+      - `src/app/api/analyze/route.ts`
+      - `package.json`
+      - `.env.example`
 
 ### Task T5: M3 - 接入 Supabase Auth 与数据库体系
 
@@ -246,12 +250,34 @@ status: draft
 - 审计信息：
   - repo: `root`
     branch: `001-lensmor-poc`
-    commit: `<TBD>`
+    commit: `6f04d51`
     pr: `N/A`
     changed_files: 
       - `src/utils/supabase/*`
       - `src/app/login/*`
       - `src/middleware.ts`
+
+### Task T6: M4 - 数据落盘长久保存 (Supabase Postgres)
+
+- [x] **状态**：完成
+
+**代码仓范围：**
+- 根项目：OneKunDay
+
+**验收点：**
+- 在 Supabase 中创建存储每次分析报告的表。
+- 修改 `/api/analyze` 路由，在获取到大模型结果后，将结果落盘保存到 Supabase 数据库。
+
+### Task T7: M5 - 全局看板与侧边栏历史记录打通
+
+- [x] **状态**：完成
+
+**代码仓范围：**
+- 根项目：OneKunDay
+
+**验收点：**
+- 前端能通过接口获取历史检测记录，并在侧边栏展示真实的“监控中”列表。
+- （可选）提供全局看板页，展示所有历史记录的概览。
 
 ---
 

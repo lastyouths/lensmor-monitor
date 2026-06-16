@@ -3,6 +3,8 @@ import { mockReportData, ReportData } from "../../mock_data";
 import { z } from "zod";
 import { generateObject } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
+import { createClient as createSupabaseServerClient } from "../../../utils/supabase/server";
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 
 // 初始化 OpenAI 客户端
 const customOpenAI = createOpenAI({
@@ -55,7 +57,7 @@ const reportSchema = z.object({
   })),
 });
 
-async function processAnalysisTask(taskId: string, url: string) {
+async function processAnalysisTask(taskId: string, url: string, userId?: string, accessToken?: string) {
   try {
     console.log(`[Task ${taskId}] 1. 开始使用 Jina Reader 抓取: ${url}`);
     console.log(`[Task ${taskId}] 当前 API KEY 长度:`, process.env.OPENAI_API_KEY?.length);
@@ -65,7 +67,9 @@ async function processAnalysisTask(taskId: string, url: string) {
     if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY.trim() === "") {
       console.log(`[Task ${taskId}] ⚠️ 未检测到 OPENAI_API_KEY，降级为使用 Mock 数据。`);
       await new Promise(resolve => setTimeout(resolve, 3000));
-      taskStore.set(taskId, { status: "completed", data: { ...mockReportData, url } });
+      const mockResult = { ...mockReportData, url };
+      await saveToDatabase(taskId, mockResult, userId, accessToken);
+      taskStore.set(taskId, { status: "completed", data: mockResult });
       return;
     }
 
@@ -115,12 +119,51 @@ async function processAnalysisTask(taskId: string, url: string) {
     };
 
     console.log(`[Task ${taskId}] 3. 大模型分析完毕！`);
+    
+    // 保存到数据库
+    await saveToDatabase(taskId, finalData, userId, accessToken);
+    
     taskStore.set(taskId, { status: "completed", data: finalData });
 
   } catch (error) {
     console.error(`[Task ${taskId}] 处理失败:`, error);
     // POC: 遇到真实错误时，回退到 mock 数据，避免页面挂掉
-    taskStore.set(taskId, { status: "completed", data: { ...mockReportData, url } });
+    const fallbackData = { ...mockReportData, url };
+    await saveToDatabase(taskId, fallbackData, userId, accessToken);
+    taskStore.set(taskId, { status: "completed", data: fallbackData });
+  }
+}
+
+async function saveToDatabase(taskId: string, finalData: ReportData, userId?: string, accessToken?: string) {
+  if (userId && accessToken && process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+    console.log(`[Task ${taskId}] 4. 正在保存到 Supabase 数据库...`);
+    const supabase = createSupabaseClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+      {
+        global: {
+          headers: { Authorization: `Bearer ${accessToken}` }
+        }
+      }
+    );
+
+    const { error: dbError } = await supabase.from('reports').insert({
+      user_id: userId,
+      url: finalData.url,
+      company_name: finalData.companyName,
+      summary: finalData.summary,
+      company_profile: finalData.companyProfile,
+      social_sentiment: finalData.socialSentiment,
+      historical_timeline: finalData.historicalTimeline,
+      differences: finalData.differences,
+      advices: finalData.advices,
+    });
+
+    if (dbError) {
+      console.error(`[Task ${taskId}] 保存到数据库失败:`, dbError);
+    } else {
+      console.log(`[Task ${taskId}] 5. 成功保存到数据库！`);
+    }
   }
 }
 
@@ -133,12 +176,25 @@ export async function POST(req: Request) {
 
     const taskId = `task_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
+    // 获取当前用户会话以便鉴权
+    let userId: string | undefined = undefined;
+    let accessToken: string | undefined = undefined;
+    
+    try {
+      const supabaseServer = await createSupabaseServerClient();
+      const { data: { session } } = await supabaseServer.auth.getSession();
+      userId = session?.user?.id;
+      accessToken = session?.access_token;
+    } catch (e) {
+      console.warn("未获取到登录信息，可能处于非强制 Auth 模式");
+    }
+
     // 设置状态为 pending
     taskStore.set(taskId, { status: "pending", data: null });
 
     // 真正的后台异步处理（在 serverless 下可能被杀，但 POC 内存 Map 足够）
     // 注意：不要在 await 阻塞
-    processAnalysisTask(taskId, url).catch(console.error);
+    processAnalysisTask(taskId, url, userId, accessToken).catch(console.error);
 
     return NextResponse.json({ taskId, status: "pending" });
   } catch (err) {
