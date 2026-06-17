@@ -9,7 +9,6 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { createClient as createSupabaseServerClient } from "../../../utils/supabase/server";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 
-// 初始化 OpenAI 客户端
 const customOpenAI = createOpenAI({
   apiKey: process.env.OPENAI_API_KEY || "",
   baseURL: process.env.OPENAI_BASE_URL || "https://api.openai.com/v1",
@@ -17,7 +16,6 @@ const customOpenAI = createOpenAI({
 
 type TaskEntry = { status: string; data?: ReportData | null; error?: string; requiresLogin?: boolean };
 
-// 全局任务存储，伪异步核心 (在开发和无状态边缘环境中会丢失，只适用于 POC)
 const globalStore = global as unknown as { taskStore: Map<string, TaskEntry> };
 if (!globalStore.taskStore) {
   globalStore.taskStore = new Map();
@@ -26,7 +24,7 @@ const taskStore = globalStore.taskStore;
 
 const reportSchema = z.object({
   companyName: z.string(),
-  summary: z.string().describe("【重要】极其详细的网页内容快照记录。必须包含页面上出现的所有具体价格数值、核心功能列表、标语文案等具体细节。这将作为未来进行差异比对的唯一基准数据，越详细越好。"),
+  summary: z.string().describe("详细的网页内容快照，包含所有价格数值、核心功能、标语文案等"),
   companyProfile: z.object({
     founded: z.string(),
     type: z.string(),
@@ -51,159 +49,144 @@ const reportSchema = z.object({
   })),
 });
 
-async function processAnalysisTask(taskId: string, url: string, pastReports: Record<string, unknown>[], userId?: string) {
+// 抓取页面内容：本地直接 fetch，外部走 Jina（强制无缓存）
+async function fetchPageContent(taskId: string, url: string): Promise<string> {
+  if (url.includes("localhost") || url.includes("127.0.0.1")) {
+    console.log(`[${taskId}] 直接 fetch 本地页面: ${url}`);
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Local fetch failed: ${res.status}`);
+    const html = await res.text();
+    return html
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+      .replace(/<img[^>]+alt=["']([^"']+)["'][^>]*/gi, ' [图片: $1] ')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .substring(0, 15000);
+  } else {
+    console.log(`[${taskId}] Jina 抓取外部页面: ${url}`);
+    const res = await fetch(`https://r.jina.ai/${url}`, {
+      headers: {
+        "Accept": "text/markdown",
+        "X-Return-Format": "markdown",
+        "X-No-Cache": "true",
+        "X-Timeout": "30",
+      }
+    });
+    if (!res.ok) throw new Error(`Jina fetch failed: ${res.status}`);
+    return (await res.text()).substring(0, 15000);
+  }
+}
+
+/**
+ * 两阶段 diff 策略：
+ *   - 首次采集：只抓取原文存入 DB，做基础信息提取，differences = []
+ *   - 非首次：拿上次 raw_content + 本次 raw_content 同时给 LLM，做精确逐字 diff
+ */
+async function processAnalysisTask(
+  taskId: string,
+  url: string,
+  previousRawContent: string | null,
+  userId?: string
+) {
   try {
-    console.log(`[Task ${taskId}] 当前 API KEY 长度:`, process.env.OPENAI_API_KEY?.length);
-    console.log(`[Task ${taskId}] 传入的 userId:`, userId);
-    console.log(`[Task ${taskId}] 同步获取到的历史记录条数:`, pastReports.length);
-    
-    // 如果没有配 Key (长度为 0 或 undefined)，直接走 Mock 逻辑
+    // Mock 降级（无 API Key）
     if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY.trim() === "") {
-      console.log(`[Task ${taskId}] ⚠️ 未检测到 OPENAI_API_KEY，降级为使用 Mock 数据。`);
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      console.log(`[${taskId}] 无 OPENAI_API_KEY，使用 Mock 数据`);
+      await new Promise(r => setTimeout(r, 2000));
       const mockResult = { ...mockReportData, url };
-      await saveToDatabase(taskId, mockResult, "mock_raw_content", userId);
+      await saveToDatabase(taskId, mockResult, "mock", userId);
       taskStore.set(taskId, { status: "completed", data: mockResult, requiresLogin: !userId });
       return;
     }
 
-    let truncatedContent = "";
-    if (url.includes("localhost") || url.includes("127.0.0.1")) {
-      console.log(`[Task ${taskId}] 1. 目标是本地测试页面，直接抓取: ${url}`);
-      const localRes = await fetch(url);
-      if (!localRes.ok) throw new Error(`Local fetch failed with status: ${localRes.status}`);
-      const htmlContent = await localRes.text();
-      
-      // 简单剥离下 HTML 标签，但专门保留图片的 alt 信息以便 AI 能够“看到”图片的存在
-      let textContent = htmlContent.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-                                   .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
-      
-      // 提取图片 alt
-      textContent = textContent.replace(/<img[^>]+alt=["']([^"']+)["'][^>]*>/gi, ' [图片: $1] ');
-      textContent = textContent.replace(/<img[^>]+>/gi, ' [图片] ');
-      
-      // 剥离其他标签
-      truncatedContent = textContent.replace(/<[^>]+>/g, ' ')
-                                    .replace(/\s+/g, ' ')
-                                    .trim()
-                                    .substring(0, 12000);
-    } else {
-      console.log(`[Task ${taskId}] 1. 开始使用 Jina Reader 抓取: ${url}`);
-      const jinaRes = await fetch(`https://r.jina.ai/${url}`, {
-        headers: {
-          "Accept": "text/markdown",
-          "X-Return-Format": "markdown",
-          "X-No-Cache": "true",       // 禁用 Jina 缓存，确保每次抓取最新内容
-          "X-Timeout": "30",
-        }
+    const modelName = (process.env.OPENAI_MODEL || "gpt-4o-mini").trim();
+
+    // ── Step 1: 抓取当前页面原始内容 ──
+    const currentContent = await fetchPageContent(taskId, url);
+    console.log(`[${taskId}] 抓取完成: ${currentContent.length} 字符`);
+
+    // ── Step 2: 首次采集 → 存原文，提取基本信息，不做 diff ──
+    if (!previousRawContent) {
+      console.log(`[${taskId}] 首次采集，建立基准快照，不做 diff`);
+      const { object } = await generateObject({
+        model: customOpenAI(modelName),
+        schema: reportSchema,
+        prompt: `你是商业分析专家。这是对该网站的【首次采集】，请完成以下任务：
+1. 提取 companyName、companyProfile、summary（详细记录所有价格、功能、标语）。
+2. differences 必须返回空数组 []，因为没有历史基准可对比。
+3. advices 返回一条提示说明已建立基准。
+所有内容用简体中文。
+
+目标 URL: ${url}
+=== 当前页面内容 ===
+${currentContent}
+=== 结束 ===`,
       });
 
-      if (!jinaRes.ok) {
-        throw new Error(`Jina fetch failed with status: ${jinaRes.status}`);
-      }
-
-      const markdownContent = await jinaRes.text();
-      truncatedContent = markdownContent.substring(0, 12000); // 截断防爆 Token
-    }
-
-    console.log(`[Task ${taskId}] 2. 抓取成功 (截取 ${truncatedContent.length} 字符)。开始调用大模型分析...`);
-
-    const modelName = process.env.OPENAI_MODEL && process.env.OPENAI_MODEL.trim() !== "" 
-      ? process.env.OPENAI_MODEL.trim() 
-      : "gpt-4o-mini";
-
-    // --- 真实比对逻辑核心注入 ---
-    // 尝试获取该 URL 最新的历史报告作为 oldContent
-    let previousContentContext = "";
-
-    if (pastReports && pastReports.length > 0) {
-      const lastReport = pastReports[0] as {
-        raw_content?: string;
-        summary?: string;
-        created_at: string;
+      const result: ReportData = {
+        ...object,
+        url,
+        differences: [],
+        advices: [{
+          id: "baseline",
+          priority: "low",
+          title: "✅ 基准快照已建立",
+          description: "下次触发分析时，系统将把新内容与本次原文逐字对比，自动检出所有变更。"
+        }],
       };
-
-      // 优先用 raw_content（原始抓取文本），降级用 summary
-      const baselineContent = (lastReport.raw_content && lastReport.raw_content.length > 50)
-        ? lastReport.raw_content
-        : lastReport.summary;
-      const baselineLabel = lastReport.raw_content ? "原始抓取文本" : "AI摘要";
-
-      if (baselineContent) {
-        previousContentContext = `
-【重要上下文：上一次采集的原始网页内容（${baselineLabel}）】
-上一次采集时间：${new Date(lastReport.created_at).toLocaleString('zh-CN')}
-
-<<< 上一次网页原文开始 >>>
-${baselineContent.substring(0, 8000)}
-<<< 上一次网页原文结束 >>>
-
-请将上述历史原文与当前最新抓取内容逐字逐句严格对比，找出所有真实变动（价格数值、功能增删、营销话术等）。`;
-        console.log(`[Task ${taskId}] 2.5 注入历史原文进行精确比对 (${baselineLabel}, ${baselineContent.length} 字符)`);
-      } else {
-        previousContentContext = `【重要上下文】历史记录存在但内容为空，视为首次采集。所有差异比对（differences）应为空数组 []。`;
-        console.log(`[Task ${taskId}] 2.5 历史记录内容为空，当作首次处理`);
-      }
-    } else {
-      console.log(`[Task ${taskId}] 2.5 首次采集，无历史原文`);
-      previousContentContext = `【重要上下文】这是该目标网站的第一次采集，没有历史数据。所有差异比对（differences）必须为空数组 []。`;
+      await saveToDatabase(taskId, result, currentContent, userId);
+      taskStore.set(taskId, { status: "completed", data: result, requiresLogin: !userId });
+      console.log(`[${taskId}] ✅ 首次采集完成，原文已存储 (${currentContent.length} 字符)`);
+      return;
     }
 
+    // ── Step 3: 非首次 → 上次原文 + 本次原文 → LLM 精确 diff ──
+    console.log(`[${taskId}] 有历史原文 (${previousRawContent.length} 字符)，开始精确 diff 分析...`);
     const { object } = await generateObject({
-      model: customOpenAI(modelName), // 使用自定义实例
+      model: customOpenAI(modelName),
       schema: reportSchema,
-      prompt: `
-        你是一个资深的商业分析与数据挖掘专家。我现在给你一个目标网站最新的网页内容（Markdown格式）。
-        
-        ${previousContentContext}
+      prompt: `你是商业竞品分析专家。我给你同一网站两次采集的原始内容，请逐字逐句精确对比。
 
-        请你仔细阅读并提取有价值的商业情报。
-        
-        【真实比对逻辑要求】
-        1. 核心任务是做“网站调整和定价对比的分析”。我们不再关注社媒舆情和历史事件。
-        2. 关于 "differences"：如果存在【历史原始网页内容】，请你将它与当前最新的网页内容进行逐字逐句的严格比对！提取**真正**的变动（重点关注定价数值的调整、功能增删、营销话术改变等）。如果这是第一次采集，或者真的没有实质性变动，必须严格返回空数组 []！绝对不允许无中生有！
-        3. 关于 "summary"：请提取当前网页中所有的具体价格、数据、核心功能和标语，写成一篇极其详细的快照摘要。
-        4. 给出切实可行的 "advices"（基于网站内容和定价的变化给出战略建议）。
-        
-        **非常重要：你返回的所有分析内容、总结、建议、字段说明等，必须全部使用中文（简体）！**
+=== 上一次采集内容（基准）===
+${previousRawContent.substring(0, 7000)}
+=== 上一次结束 ===
 
-        目标网站 URL: ${url}
-        === 网页内容 ===
-        ${truncatedContent}
-        === 网页内容结束 ===
-      `,
+=== 本次采集内容（最新）===
+${currentContent.substring(0, 7000)}
+=== 本次结束 ===
+
+【任务要求】
+1. differences：找出两次内容之间所有真实变动（价格数值、功能增删、文案修改、新增模块等）。若完全一致则返回 []，绝对不允许捏造！
+2. summary：基于本次内容，详细描述当前页面的价格、功能、核心标语。
+3. companyProfile：从本次内容提取公司基本信息。
+4. advices：针对检测到的变动，给出战略应对建议。
+所有内容用简体中文。目标 URL: ${url}`,
     });
 
-    const finalData: ReportData = {
-      ...object,
-      url: url,
-    };
-
-    console.log(`[Task ${taskId}] 3. 大模型分析完毕！`);
-    
-    // 保存到数据库
-    await saveToDatabase(taskId, finalData, truncatedContent, userId);
-
+    const finalData: ReportData = { ...object, url };
+    await saveToDatabase(taskId, finalData, currentContent, userId);
     taskStore.set(taskId, { status: "completed", data: finalData, requiresLogin: !userId });
+    console.log(`[${taskId}] ✅ Diff 完成，发现 ${finalData.differences?.length ?? 0} 处变更`);
 
   } catch (error) {
-    console.error(`[Task ${taskId}] 处理失败:`, error);
-    // 不再使用 mock 数据兜底，直接将任务状态标记为 error，并将错误信息传递给前端
+    console.error(`[${taskId}] 处理失败:`, error);
     taskStore.set(taskId, { status: "error", error: error instanceof Error ? error.message : String(error) });
   }
 }
 
 async function saveToDatabase(taskId: string, finalData: ReportData, rawContent: string, userId?: string) {
   if (!userId) {
-    console.warn(`[Task ${taskId}] 未登录用户，跳过数据库保存（reports.user_id NOT NULL 约束）。`);
+    console.warn(`[${taskId}] 未登录用户，跳过数据库保存`);
     return;
   }
 
   if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-    
-    console.log(`[Task ${taskId}] 4. 正在保存到 Supabase 数据库... 使用 service_role 权限`);
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+    console.log(`[${taskId}] 保存到 Supabase...`);
     const supabase = createSupabaseClient(supabaseUrl, supabaseKey);
 
     const { error: dbError } = await supabase.from('reports').insert({
@@ -212,30 +195,25 @@ async function saveToDatabase(taskId: string, finalData: ReportData, rawContent:
       company_name: finalData.companyName,
       summary: finalData.summary,
       company_profile: finalData.companyProfile,
-      raw_content: rawContent,          // 直接存储原始抓取文本，用于下次精确 diff
-      social_sentiment: { rawContent }, // 保留兼容旧字段
+      raw_content: rawContent,
+      social_sentiment: {},
       historical_timeline: [],
       differences: finalData.differences,
       advices: finalData.advices,
     });
 
-// 如果是由于 RLS 导致插入失败（因为没有绑定有效的 user_id），但作为 POC 依然允许在前端展示 diff
     if (dbError && dbError.message.includes("row-level security")) {
-      console.warn(`[Task ${taskId}] 由于 RLS 策略保存到数据库失败，但允许继续返回数据给前端。`);
-      // 继续向下执行
+      console.warn(`[${taskId}] RLS 拒绝插入，跳过`);
     } else if (dbError) {
-      console.error(`[Task ${taskId}] 保存到数据库失败:`, dbError);
+      console.error(`[${taskId}] 数据库保存失败:`, dbError);
       throw new Error(`数据库保存失败: ${dbError.message}`);
     } else {
-      console.log(`[Task ${taskId}] 5. 成功保存到数据库！`);
-      // 更新 monitor_targets 的 last_run_at
-      if (userId) {
-        await supabase
-          .from('monitor_targets')
-          .update({ last_run_at: new Date().toISOString() })
-          .eq('user_id', userId)
-          .eq('url', finalData.url);
-      }
+      console.log(`[${taskId}] ✅ 保存成功`);
+      await supabase
+        .from('monitor_targets')
+        .update({ last_run_at: new Date().toISOString() })
+        .eq('user_id', userId)
+        .eq('url', finalData.url);
     }
   }
 }
@@ -246,7 +224,6 @@ export async function POST(req: Request) {
     const body = await req.json();
     url = body?.url;
   } catch {
-    // BUG-05 fix: 非 JSON 请求体返回 400 而非 500
     return NextResponse.json({ error: "请求体必须是合法 JSON" }, { status: 400 });
   }
 
@@ -254,7 +231,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Missing url" }, { status: 400 });
   }
 
-  // BUG-04 fix: 服务端 URL 格式与协议校验
   try {
     const parsed = new URL(url);
     if (!['http:', 'https:'].includes(parsed.protocol)) {
@@ -270,37 +246,39 @@ export async function POST(req: Request) {
   try {
     const taskId = `task_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
-    // 获取当前用户会话以便鉴权
     let userId: string | undefined = undefined;
-    let pastReports: Record<string, unknown>[] = [];
-    
+    let previousRawContent: string | null = null;
+
     try {
       const supabaseServer = await createSupabaseServerClient();
       const { data: { session } } = await supabaseServer.auth.getSession();
       userId = session?.user?.id;
 
-      // 在这里（前台同步生命周期内）去拿历史记录，避开后台取不到 cookies 的问题
+      // 同步拉取上次该 URL 的原始抓取内容（作为 diff 基准）
       let query = supabaseServer
         .from('reports')
-        .select('raw_content, summary, created_at')  // 优先取 raw_content 原始文本
+        .select('raw_content')
         .eq('url', url)
         .order('created_at', { ascending: false })
         .limit(1);
 
-      // 有登录用户时只取自己的历史，保证数据隔离
       if (userId) query = query.eq('user_id', userId) as typeof query;
-      
+
       const { data } = await query;
-      if (data) pastReports = data;
+      previousRawContent = data?.[0]?.raw_content ?? null;
+      console.log(`[${taskId}] 上次原文: ${previousRawContent ? previousRawContent.length + ' 字符' : '无（首次采集）'}`);
     } catch {
-      console.warn("未获取到登录信息，可能处于非强制 Auth 模式");
+      console.warn("未获取到登录信息");
     }
 
-    // 设置状态为 pending
-    taskStore.set(taskId, { status: "pending", data: null });
+    // BUG-03: 标记未登录，供前端 toast 提示
+    if (!userId) {
+      taskStore.set(taskId, { status: "pending", data: null, requiresLogin: true });
+    } else {
+      taskStore.set(taskId, { status: "pending", data: null });
+    }
 
-    // 真正的后台异步处理（在 serverless 下可能被杀，但 POC 内存 Map 足够）
-    processAnalysisTask(taskId, url, pastReports, userId).catch(console.error);
+    processAnalysisTask(taskId, url, previousRawContent, userId).catch(console.error);
 
     return NextResponse.json({ taskId, status: "pending" });
   } catch {
