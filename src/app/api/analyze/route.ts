@@ -186,22 +186,22 @@ async function saveToDatabase(taskId: string, finalData: ReportData, rawContent:
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-    const safeRawContent = rawContent || "[EMPTY_CONTENT_DEBUG]";
-    console.log(`[${taskId}] 保存到 Supabase... rawContent 长度=${rawContent?.length ?? 'NULL'}, userId=${userId}`);
+    const safeRawContent = rawContent || "[FALLBACK_NO_CONTENT]";
+    console.log(`[${taskId}] 保存到 Supabase... rawContent 长度=${rawContent?.length ?? 'NULL'}`);
     const supabase = createSupabaseClient(supabaseUrl, supabaseKey);
 
-    const { error: dbError } = await supabase.from('reports').insert({
+    // Step A: INSERT 主字段（不含 raw_content，绕过 PostgREST 新增列 INSERT 权限问题）
+    const { data: newRow, error: dbError } = await supabase.from('reports').insert({
       user_id: userId,
       url: finalData.url,
       company_name: finalData.companyName,
       summary: finalData.summary,
       company_profile: finalData.companyProfile,
-      raw_content: safeRawContent,
       social_sentiment: {},
       historical_timeline: [],
       differences: finalData.differences,
       advices: finalData.advices,
-    });
+    }).select('id').single();
 
     if (dbError && dbError.message.includes("row-level security")) {
       console.warn(`[${taskId}] RLS 拒绝插入，跳过`);
@@ -209,7 +209,22 @@ async function saveToDatabase(taskId: string, finalData: ReportData, rawContent:
       console.error(`[${taskId}] 数据库保存失败:`, dbError);
       throw new Error(`数据库保存失败: ${dbError.message}`);
     } else {
-      console.log(`[${taskId}] ✅ 保存成功`);
+      console.log(`[${taskId}] ✅ INSERT 成功，row id=${newRow?.id}`);
+
+      // Step B: UPDATE raw_content（UPDATE 权限已验证可用）
+      if (newRow?.id) {
+        const { error: updateError } = await supabase
+          .from('reports')
+          .update({ raw_content: safeRawContent })
+          .eq('id', newRow.id);
+
+        if (updateError) {
+          console.error(`[${taskId}] raw_content UPDATE 失败:`, updateError.message);
+        } else {
+          console.log(`[${taskId}] ✅ raw_content 已写入 (${safeRawContent.length} 字符)`);
+        }
+      }
+
       await supabase
         .from('monitor_targets')
         .update({ last_run_at: new Date().toISOString() })
