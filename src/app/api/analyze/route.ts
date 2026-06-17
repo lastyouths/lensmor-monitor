@@ -66,14 +66,18 @@ async function fetchPageContent(taskId: string, url: string): Promise<string> {
       .substring(0, 15000);
   } else {
     console.log(`[${taskId}] Jina 抓取外部页面: ${url}`);
+    const jinaController = new AbortController();
+    const jinaTimer = setTimeout(() => jinaController.abort(), 25000); // 25s 硬超时
     const res = await fetch(`https://r.jina.ai/${url}`, {
+      signal: jinaController.signal,
       headers: {
         "Accept": "text/markdown",
         "X-Return-Format": "markdown",
         "X-No-Cache": "true",
-        "X-Timeout": "30",
+        "X-Timeout": "25",
       }
     });
+    clearTimeout(jinaTimer);
     if (!res.ok) throw new Error(`Jina fetch failed: ${res.status}`);
     return (await res.text()).substring(0, 15000);
   }
@@ -90,6 +94,7 @@ async function processAnalysisTask(
   previousRawContent: string | null,
   userId?: string
 ) {
+  console.log(`[${taskId}] ▶ 任务开始 url=${url} userId=${userId ?? 'guest'} hasPrev=${!!previousRawContent}`);
   try {
     // Mock 降级（无 API Key）
     if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY.trim() === "") {
@@ -102,14 +107,16 @@ async function processAnalysisTask(
     }
 
     const modelName = (process.env.OPENAI_MODEL || "gpt-4o-mini").trim();
+    console.log(`[${taskId}] 使用模型: ${modelName}`);
 
     // ── Step 1: 抓取当前页面原始内容 ──
+    console.log(`[${taskId}] Step1: 开始抓取页面...`);
     const currentContent = await fetchPageContent(taskId, url);
-    console.log(`[${taskId}] 抓取完成: ${currentContent.length} 字符`);
+    console.log(`[${taskId}] Step1: 抓取完成，${currentContent.length} 字符`);
 
     // ── Step 2: 首次采集 → 存原文，提取基本信息，不做 diff ──
     if (!previousRawContent) {
-      console.log(`[${taskId}] 首次采集，建立基准快照，不做 diff`);
+      console.log(`[${taskId}] Step2: 首次采集，建立基准快照，开始调 LLM...`);
       const { object } = await generateObject({
         model: customOpenAI(modelName),
         schema: reportSchema,
@@ -136,6 +143,7 @@ ${currentContent}
           description: "下次触发分析时，系统将把新内容与本次原文逐字对比，自动检出所有变更。"
         }],
       };
+      console.log(`[${taskId}] Step2: LLM 返回，开始保存到数据库...`);
       await saveToDatabase(taskId, result, currentContent, userId);
       taskStore.set(taskId, { status: "completed", data: result, requiresLogin: !userId });
       console.log(`[${taskId}] ✅ 首次采集完成，原文已存储 (${currentContent.length} 字符)`);
@@ -143,7 +151,7 @@ ${currentContent}
     }
 
     // ── Step 3: 非首次 → 上次原文 + 本次原文 → LLM 精确 diff ──
-    console.log(`[${taskId}] 有历史原文 (${previousRawContent.length} 字符)，开始精确 diff 分析...`);
+    console.log(`[${taskId}] Step3: 有历史原文 (${previousRawContent.length} 字符)，开始调 LLM diff...`);
     const { object } = await generateObject({
       model: customOpenAI(modelName),
       schema: reportSchema,
@@ -165,13 +173,14 @@ ${currentContent.substring(0, 7000)}
 所有内容用简体中文。目标 URL: ${url}`,
     });
 
+    console.log(`[${taskId}] Step3: LLM diff 返回，differences=${object.differences?.length ?? 0}，开始保存...`);
     const finalData: ReportData = { ...object, url };
     await saveToDatabase(taskId, finalData, currentContent, userId);
     taskStore.set(taskId, { status: "completed", data: finalData, requiresLogin: !userId });
-    console.log(`[${taskId}] ✅ Diff 完成，发现 ${finalData.differences?.length ?? 0} 处变更`);
+    console.log(`[${taskId}] ✅ 全部完成，发现 ${finalData.differences?.length ?? 0} 处变更`);
 
   } catch (error) {
-    console.error(`[${taskId}] 处理失败:`, error);
+    console.error(`[${taskId}] ❌ 任务异常:`, error instanceof Error ? error.message : error);
     taskStore.set(taskId, { status: "error", error: error instanceof Error ? error.message : String(error) });
   }
 }

@@ -98,11 +98,33 @@ export default function HomePage() {
   useEffect(() => {
     let intervalId: NodeJS.Timeout;
 
+    let pollCount = 0;
+    const MAX_POLLS = 60; // 最多轮询 60 次 × 2s = 120 秒，超时自动报错
+
     const pollTask = async () => {
       if (!taskId) return;
+      pollCount++;
+      if (pollCount > MAX_POLLS) {
+        toast.error("❌ 分析超时", { description: "云端任务超过 2 分钟未响应，请重试。", duration: 8000 });
+        setStatus("idle");
+        setTaskId(null);
+        setRunningTargetId(null);
+        if (intervalId) clearInterval(intervalId);
+        return;
+      }
       try {
         const res = await fetch(`/api/analyze?taskId=${taskId}`);
-        if (!res.ok) return;
+        if (!res.ok) {
+          // 404 说明 serverless 实例已重置，任务丢失，视为超时
+          if (res.status === 404 && pollCount > 5) {
+            toast.error("❌ 任务丢失", { description: "云端任务状态丢失，请重新提交分析。", duration: 8000 });
+            setStatus("idle");
+            setTaskId(null);
+            setRunningTargetId(null);
+            if (intervalId) clearInterval(intervalId);
+          }
+          return;
+        }
         const data = await res.json();
         
         if (data.status === "completed") {
