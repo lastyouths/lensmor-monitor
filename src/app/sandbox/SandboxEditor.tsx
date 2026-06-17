@@ -54,7 +54,8 @@ export function SandboxEditor({ initialContent }: { initialContent: SandboxData 
 
   async function handleSave() {
     setSaving(true);
-    await fetch("/api/sandbox", {
+    const ts = Date.now();
+    await fetch(`/api/sandbox?t=${ts}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(content),
@@ -68,7 +69,8 @@ export function SandboxEditor({ initialContent }: { initialContent: SandboxData 
 
   async function handleReset() {
     if (!confirm("确认恢复默认内容？")) return;
-    await fetch("/api/sandbox", { method: "DELETE" });
+    const ts = Date.now();
+    await fetch(`/api/sandbox?t=${ts}`, { method: "DELETE" });
     router.refresh();
     setEditing(false);
   }

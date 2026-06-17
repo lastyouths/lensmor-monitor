@@ -20,7 +20,13 @@ export async function GET() {
     ? data.content as SandboxData
     : defaultContent;
 
-  return NextResponse.json(content);
+  const res = NextResponse.json(content);
+  // 完全禁用 GET 接口的 CDN 缓存和浏览器缓存
+  res.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.headers.set('Pragma', 'no-cache');
+  res.headers.set('Expires', '0');
+  res.headers.set('Surrogate-Control', 'no-store');
+  return res;
 }
 
 export async function POST(req: Request) {

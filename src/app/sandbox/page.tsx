@@ -2,8 +2,11 @@ import { createClient } from "@supabase/supabase-js";
 import { defaultContent, type SandboxData } from "../../lib/sandboxStore";
 import { SandboxEditor } from "./SandboxEditor";
 
-// 每次请求都重新读取，不缓存
+// Server Component：每次请求从 Supabase 读最新内容，直接嵌入 HTML
+// Jina / 直接 fetch 拿到的原始 HTML 即包含最新修改内容
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
+export const fetchCache = "force-no-store";
 
 async function getContent(): Promise<SandboxData> {
   try {
@@ -25,7 +28,6 @@ async function getContent(): Promise<SandboxData> {
 }
 
 // Server Component：每次请求从 Supabase 读最新内容，直接嵌入 HTML
-// Jina / 直接 fetch 拿到的原始 HTML 即包含最新修改内容
 export default async function SandboxPage() {
   const content = await getContent();
 
