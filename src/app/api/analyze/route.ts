@@ -93,6 +93,8 @@ async function processAnalysisTask(taskId: string, url: string, pastReports: Rec
         headers: {
           "Accept": "text/markdown",
           "X-Return-Format": "markdown",
+          "X-No-Cache": "true",       // 禁用 Jina 缓存，确保每次抓取最新内容
+          "X-Timeout": "30",
         }
       });
 
@@ -115,18 +117,31 @@ async function processAnalysisTask(taskId: string, url: string, pastReports: Rec
     let previousContentContext = "";
 
     if (pastReports && pastReports.length > 0) {
-      const lastReport = pastReports[0] as { social_sentiment?: { rawContent?: string }; created_at: string };
-      const previousRawContent = lastReport.social_sentiment?.rawContent || "无记录";
-      previousContentContext = `
-      【重要上下文：历史原始网页内容】
+      const lastReport = pastReports[0] as {
+        social_sentiment?: { rawContent?: string };
+        summary?: string;
+        created_at: string;
+      };
+      // 优先使用原始抓取内容，降级用 summary 摘要作为对比基准
+      const previousRawContent = lastReport.social_sentiment?.rawContent;
+      const hasPreviousContent = previousRawContent && previousRawContent !== "无记录" && previousRawContent.length > 50;
+      const baselineContent = hasPreviousContent ? previousRawContent : lastReport.summary;
+
+      if (baselineContent) {
+        previousContentContext = `
+      【重要上下文：历史网页内容（${hasPreviousContent ? "原始抓取文本" : "AI摘要"}）】
       上一次采集时间：${new Date(lastReport.created_at).toISOString()}
-      上一次的完整网页原始内容如下，这是你进行差异比对的唯一且最准确的基准：
+      以下是上次采集的内容，请以此为基准进行逐字逐句严格比对：
       
-      <<< 上一次网页内容开始 >>>
-      ${previousRawContent}
-      <<< 上一次网页内容结束 >>>
-      `;
-      console.log(`[Task ${taskId}] 2.5 成功注入历史RAW文本进行比对`);
+      <<< 上一次内容开始 >>>
+      ${baselineContent!.substring(0, 8000)}
+      <<< 上一次内容结束 >>>
+        `;
+        console.log(`[Task ${taskId}] 2.5 成功注入历史内容进行比对 (${hasPreviousContent ? "rawContent" : "summary fallback"}, ${baselineContent!.length} 字符)`);
+      } else {
+        previousContentContext = `【重要上下文】这是该目标网站的第一次有效采集，没有可用历史内容。所有差异比对（differences）应为空数组 []。`;
+        console.log(`[Task ${taskId}] 2.5 历史记录存在但内容为空，当作首次处理`);
+      }
     } else {
       console.log(`[Task ${taskId}] 2.5 这是首次采集，无历史上下文`);
       previousContentContext = `【重要上下文】这是该目标网站的第一次采集，没有历史数据。因此，所有的差异比对（differences）都应当为空数组 []。`;
@@ -262,12 +277,15 @@ export async function POST(req: Request) {
       userId = session?.user?.id;
 
       // 在这里（前台同步生命周期内）去拿历史记录，避开后台取不到 cookies 的问题
-      const query = supabaseServer
+      let query = supabaseServer
         .from('reports')
-        .select('summary, company_profile, social_sentiment, created_at')
+        .select('summary, social_sentiment, created_at')
         .eq('url', url)
         .order('created_at', { ascending: false })
         .limit(1);
+
+      // 有登录用户时只取自己的历史，保证数据隔离
+      if (userId) query = query.eq('user_id', userId) as typeof query;
       
       const { data } = await query;
       if (data) pastReports = data;
