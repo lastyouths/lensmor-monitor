@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 import { mockReportData, ReportData } from "../../mock_data";
+
+// Vercel Hobby 计划最大允许 60s，防止分析任务被 10s 默认超时杀死
+export const maxDuration = 60;
 import { z } from "zod";
 import { generateObject } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
