@@ -56,7 +56,12 @@ async function fetchPageContent(taskId: string, url: string): Promise<string> {
   const timer = setTimeout(() => controller.abort(), 20000);
   
   try {
-    const res = await fetch(url, {
+    // 强制追加随机时间戳，彻底打穿 Vercel CDN/Next.js/浏览器 的一切可能缓存
+    const bustUrl = new URL(url);
+    bustUrl.searchParams.set('_t', Date.now().toString());
+    const finalUrl = bustUrl.toString();
+
+    const res = await fetch(finalUrl, {
       signal: controller.signal,
       cache: "no-store",
       next: { revalidate: 0 },
