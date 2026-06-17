@@ -1,17 +1,42 @@
 import { NextResponse } from "next/server";
-import { getContent, setContent, resetContent } from "../../../lib/sandboxStore";
+import { createClient } from "@supabase/supabase-js";
+import { defaultContent, type SandboxData } from "../../../lib/sandboxStore";
+
+function getSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
+}
 
 export async function GET() {
-  return NextResponse.json(getContent());
+  const supabase = getSupabase();
+  const { data } = await supabase
+    .from("sandbox_content")
+    .select("content")
+    .eq("id", "default")
+    .single();
+
+  const content: SandboxData = data?.content && Object.keys(data.content).length > 0
+    ? data.content as SandboxData
+    : defaultContent;
+
+  return NextResponse.json(content);
 }
 
 export async function POST(req: Request) {
   const body = await req.json();
-  setContent(body);
+  const supabase = getSupabase();
+  await supabase
+    .from("sandbox_content")
+    .upsert({ id: "default", content: { ...defaultContent, ...body }, updated_at: new Date().toISOString() });
   return NextResponse.json({ success: true });
 }
 
 export async function DELETE() {
-  resetContent();
+  const supabase = getSupabase();
+  await supabase
+    .from("sandbox_content")
+    .upsert({ id: "default", content: defaultContent, updated_at: new Date().toISOString() });
   return NextResponse.json({ success: true });
 }

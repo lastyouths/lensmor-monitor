@@ -1,10 +1,32 @@
-import { getContent } from "../../lib/sandboxStore";
+import { createClient } from "@supabase/supabase-js";
+import { defaultContent, type SandboxData } from "../../lib/sandboxStore";
 import { SandboxEditor } from "./SandboxEditor";
 
-// Server Component：每次请求时从 store 读取最新内容，直接渲染到 HTML
-// Jina / 直接 fetch 拿到的 HTML 已包含最新修改内容
-export default function SandboxPage() {
-  const content = getContent();
+// 每次请求都重新读取，不缓存
+export const dynamic = "force-dynamic";
+
+async function getContent(): Promise<SandboxData> {
+  try {
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
+    const { data } = await supabase
+      .from("sandbox_content")
+      .select("content")
+      .eq("id", "default")
+      .single();
+    if (data?.content && Object.keys(data.content).length > 0) {
+      return data.content as SandboxData;
+    }
+  } catch { /* 降级到默认内容 */ }
+  return defaultContent;
+}
+
+// Server Component：每次请求从 Supabase 读最新内容，直接嵌入 HTML
+// Jina / 直接 fetch 拿到的原始 HTML 即包含最新修改内容
+export default async function SandboxPage() {
+  const content = await getContent();
 
   return (
     <div style={{ fontFamily: "sans-serif", maxWidth: "860px", margin: "0 auto", padding: "40px 20px" }}>
