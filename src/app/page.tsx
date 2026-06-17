@@ -256,16 +256,34 @@ export default function HomePage() {
         body: JSON.stringify({ url: activeTarget.url }),
       });
       const data = await res.json();
-      if (data.taskId) {
+      
+      if (data.status === "completed" || data.status === "error") {
+        if (data.status === "completed") {
+          await fetchTargets();
+          await fetchReportsForTarget(activeTarget.url);
+          if (data.requiresLogin) {
+            toast.warning("⚠️ 分析完成，但报告未保存", { description: "游客模式下报告不会持久化，请登录后再重新分析以保存结果。", duration: 8000 });
+          } else if (data.data?.differences && data.data.differences.length > 0) {
+            toast.success(`🎉 分析完成！发现 ${data.data.differences.length} 处实质性差异。`, { duration: 5000 });
+          } else {
+            toast.info("✅ 分析完成，已建立基准或未发现变动。");
+          }
+          setStatus("success");
+        } else {
+          toast.error("❌ 分析任务执行失败", { description: data.error || "未知错误", duration: 8000 });
+          setStatus("idle");
+        }
+        setRunningTargetId(null);
+      } else if (data.taskId) {
         setTaskId(data.taskId);
       } else {
         setStatus("idle");
-        alert("Failed to start analysis task");
+        toast.error("Failed to start analysis task");
       }
     } catch (err) {
       console.error(err);
       setStatus("idle");
-      alert("Failed to start analysis task");
+      toast.error("Failed to start analysis task");
     }
   };
 
