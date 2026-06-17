@@ -3,10 +3,9 @@ import { createClient } from "@supabase/supabase-js";
 import { defaultContent, type SandboxData } from "../../../lib/sandboxStore";
 
 function getSupabase() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+  return createClient(url, key);
 }
 
 export async function GET() {
