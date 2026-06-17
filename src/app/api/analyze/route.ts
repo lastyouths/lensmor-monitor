@@ -58,11 +58,14 @@ async function fetchPageContent(taskId: string, url: string): Promise<string> {
   try {
     const res = await fetch(url, {
       signal: controller.signal,
+      cache: "no-store",
+      next: { revalidate: 0 },
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-        "Cache-Control": "no-cache",
-        "Pragma": "no-cache"
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "Pragma": "no-cache",
+        "Expires": "0"
       }
     });
     
