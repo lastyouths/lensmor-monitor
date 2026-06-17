@@ -17,7 +17,8 @@ async function getContent(): Promise<SandboxData> {
       .eq("id", "default")
       .single();
     if (data?.content && Object.keys(data.content).length > 0) {
-      return data.content as SandboxData;
+      // 合并 defaultContent 保证所有字段存在，防止旧存储数据缺字段
+      return { ...defaultContent, ...(data.content as SandboxData) };
     }
   } catch { /* 降级到默认内容 */ }
   return defaultContent;
