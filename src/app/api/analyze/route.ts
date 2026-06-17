@@ -220,27 +220,33 @@ async function saveToDatabase(taskId: string, finalData: ReportData, rawContent:
     } else {
       console.log(`[${taskId}] ✅ INSERT 成功，row id=${newRow?.id}`);
 
-      // Step B: UPDATE raw_content（UPDATE 权限已验证可用）
+      // Step B: UPDATE raw_content
+      // 先用 supabase js client 尝试更新
       if (newRow?.id) {
-        // 使用 rpc (远程函数) 或者直接用 service_role key 创建的专属 client 确保强行写入
-        // Vercel 上的 supabase js 客户端如果一直拿不到新 schema，就会自动过滤掉 raw_content
-        // 为了绕过 JS 客户端的 schema 检查，我们直接发底层 fetch 请求给 Supabase REST API
-        const patchRes = await fetch(`${supabaseUrl}/rest/v1/reports?id=eq.${newRow.id}`, {
-          method: 'PATCH',
-          headers: {
-            'apikey': supabaseKey,
-            'Authorization': `Bearer ${supabaseKey}`,
-            'Content-Type': 'application/json',
-            'Prefer': 'return=minimal'
-          },
-          body: JSON.stringify({ raw_content: safeRawContent })
-        });
+        const { error: updateError } = await supabase
+          .from('reports')
+          .update({ raw_content: safeRawContent })
+          .eq('id', newRow.id);
 
-        if (!patchRes.ok) {
-          const errText = await patchRes.text();
-          console.error(`[${taskId}] raw_content UPDATE 失败:`, patchRes.status, errText);
+        if (updateError) {
+          console.error(`[${taskId}] supabase.update 失败:`, updateError);
+          // 降级使用 REST API 强行绕过 client cache
+          const patchRes = await fetch(`${supabaseUrl}/rest/v1/reports?id=eq.${newRow.id}`, {
+            method: 'PATCH',
+            headers: {
+              'apikey': supabaseKey,
+              'Authorization': `Bearer ${supabaseKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ raw_content: safeRawContent })
+          });
+          if (!patchRes.ok) {
+            console.error(`[${taskId}] REST API 失败:`, await patchRes.text());
+          } else {
+            console.log(`[${taskId}] ✅ raw_content 已通过 REST API 写入`);
+          }
         } else {
-          console.log(`[${taskId}] ✅ raw_content 已写入 (${safeRawContent.length} 字符)`);
+          console.log(`[${taskId}] ✅ raw_content 已通过 Supabase Client 写入`);
         }
       }
 
