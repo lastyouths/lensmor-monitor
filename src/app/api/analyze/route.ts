@@ -90,7 +90,7 @@ async function fetchPageContent(taskId: string, url: string): Promise<string> {
       .replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, '')       // 移除导航栏（往往干扰核心内容）
       .replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, '') // 移除页脚
       .replace(/<img[^>]+alt=["']([^"']+)["'][^>]*/gi, ' [图片: $1] ')
-      .replace(/<[^>]+>/g, ' ')                         // 移除所有剩余标签
+      .replace(/<[^>]*>?/gm, '')                        // 【修复】更强力的全 HTML 标签移除正则
       .replace(/\s+/g, ' ')                             // 合并多余空白
       .trim()
       .substring(0, 15000);                             // 防爆 token 截断
