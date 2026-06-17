@@ -6,6 +6,15 @@ export async function middleware(request: NextRequest) {
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
     return;
   }
+  // 如果是开放路径，跳过鉴权
+  if (
+    request.nextUrl.pathname.startsWith('/sandbox') || 
+    request.nextUrl.pathname.startsWith('/login') ||
+    request.nextUrl.pathname.startsWith('/share')
+  ) {
+    return;
+  }
+  
   return await updateSession(request)
 }
 

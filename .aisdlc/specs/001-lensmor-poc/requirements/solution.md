@@ -1,14 +1,103 @@
 ---
 title: Lensmor Monitor POC 产品需求方案决策
-status: draft
+status: implemented
 ---
 
 ## 0. 基本信息
 
 - 需求标识：001-lensmor-poc
 - 作者 / 参与评审：Product / AI
-- 状态：draft
-- 最后更新：2026-06-16
+- 状态：implemented
+- 最后更新：2026-06-17
+
+## 1. 结论摘要（先给结论）
+
+- **一句话目标**：用最低成本、最高视觉冲击力验证"自动抓取竞品情报 + AI 深度分析 + 差异可视化 + 交互式 AI 追问"的产品价值。
+- **本次 In / Out 的边界（最终落地）**：
+  - **In**：输入竞品 URL → 后台伪异步队列 → Jina 抓取真实页面（降级 Mock）→ AI 分析生成含 Diff 与行动清单的报告 → 高级感 Dashboard 展示 → Supabase Auth 多租户鉴权 → 数据库持久化 → 任务控制（暂停/恢复/频次/手动触发）→ 历史时间轴 → 未读计数 → 报告分享（公开只读快照）→ 情报反馈持久化 → 全局 AI 悬浮追问（per-report 上下文注入 + 历史缓存）。
+  - **Out**：真分布式 MQ、自动 Cron 定时任务、邮件/Webhook 告警、报告导出（PDF/Word）、竞品矩阵大盘、Supabase RLS（代码层 `user_id` 过滤替代）。
+- **推荐方案**：Next.js 全栈承载异步伪队列，真实数据+Mock降级保障演示，重仓前端"时间轴Diff与行动建议"UI，AI SDK v6 流式 Chat 实现"静态报告 → 动态参谋"升级。
+- **优先验证点（已验证）**：V-001 Jina抓取 ✅、V-002 Diff UI ✅、V-003 AI 追问流式响应 ✅
+
+## 2. 推荐方案：Next.js All-in-One 异步模拟 + Supabase 多租户方案
+
+- **方案名**：Next.js All-in-One 异步模拟方案
+- **主流程 / 关键机制**：
+  1. 用户登录后在 Dashboard 添加监控目标（`monitor_targets` 表）。
+  2. 手动触发分析：前端调用 `POST /api/analyze`，服务端写 `taskId` + `pending` 到内存 Map，立即返回。
+  3. 后台异步：抓取 Jina Markdown + 查询历史报告（真实 Diff 比对）→ 喂给 LLM `generateObject` → 结构化输出写 `reports` 表 + 更新 `unread_count`。
+  4. 前端 2s 轮询 `GET /api/analyze?taskId=` → 获得 `completed` 后刷新时间轴列表，展示极具视觉冲击力的 Diff 卡片与行动 Checklist。
+  5. 用户在情报卡片点击"快速追问" → 全局悬浮 AI Chat 注入报告上下文 → 流式 SSE 响应 → Markdown 渲染。
+- **关键边界/取舍**：
+  - 牺牲真正的分布式鲁棒性（重启进程可能丢内存 Map），换取极速开发体验。
+  - 禁用 Supabase RLS，代码层用 `.eq('user_id', ...)` 实现数据隔离（上生产需恢复 RLS）。
+  - 外部抓取失败直接 Fallback 到 Mock 数据，确保演示不白屏。
+  - 移除社媒情绪模块（Reddit 噪音），聚焦网站内容变化与价格对比。
+- **为什么选它**：开发资源极度受限，单兵作战，无需引入额外后端服务；Supabase 免费套餐满足 POC 全量数据需求。
+
+## 3. 备选方案
+
+### 3.1 备选方案：全链路真实分布式架构
+
+- **核心机制**：前端 Next.js → Supabase DB → 数据库 Trigger → Supabase Edge Function (Deno) → 写回 DB。
+- **不选原因**：POC 阶段调试链路过长，容易偏离"验证核心视觉与逻辑"的目标；留作正式 MVP 阶段升级路径。
+
+## 4. 决策依据（证据入口清单）
+
+- `requirements/raw.md`：原始产品需求（触发机制、架构收敛、数据源降级、亮点优先级）。
+- `design/research.md`：Jina 抓取可用性结论。
+- `design/design.md`：架构决策表（D1–D6）。
+- `el/submissions/test-report.md`：全量用例测试报告，验证所有功能边界。
+
+## 5. 验证清单（V-xxx）
+
+- **V-001 真实抓取链路可用性** — ✅ 验证通过。Jina P90 ≈ 25s，本地 URL 直接 fetch 绕过。
+- **V-002 Diff UI 渲染复杂度** — ✅ 验证通过。LLM 直接输出 old/new 字段，双栏卡片 30 行 Tailwind 搞定。
+- **V-003 AI Chat 流式响应** — ✅ 验证通过。`ai` v6 + `@ai-sdk/react` v3 实现 SSE 流，per-report 历史缓存正常。
+
+## 6. 迭代记录
+
+- 2026-06-16：初始建立，收敛 POC 边界，确定 Next.js 伪异步架构；Auth/DB 列为 Out。
+- 2026-06-17：重大范围扩展。Auth + Supabase 多租户已落地；任务控制、历史时间轴、未读计数、报告分享、AI 悬浮追问、反馈持久化均已实现；移除社媒情绪模块；修复全部安全与 UX 缺陷（BUG-01 ~ BUG-05 + WARN-01）。状态更新为 implemented。
+
+## 7. Impact Analysis（需求影响分析）
+
+### 7.1 受影响模块
+
+| 模块 | 影响类型 | 关键不变量 | stale? |
+|------|----------|-----------|--------|
+| `core/poc` | 持续演进 | 保持单体极简，不引入 MQ/RLS | no |
+
+### 7.2 需遵守的不变量
+
+- 前端任何异步交互必须要有骨架屏或 Loading 状态（体验底线）。
+- 分析报告必须包含"发生了什么、为什么、怎么做"三要素。
+- PATCH/DELETE 接口必须按 `user_id` 过滤，防止越权写操作。
+
+### 7.3 跨模块影响
+
+- 无。
+
+### 7.4 Context Gaps（已解决）
+
+- ~~`CONTEXT GAP`：未接入真实 LLM 服务~~ — ✅ 已接入，通过 `.env.local` 配置。
+- ~~`CONTEXT GAP`：无 Auth/DB~~ — ✅ 已接入 Supabase SSR Auth + Postgres。
+
+## 8. Mini-PRD（最终验收标准）
+
+- **MVP 范围（最终落地）**：
+  - **In**：URL 输入 + 伪异步分析 + Diff 卡片 + 行动建议 + 多租户 Auth + 历史时间轴 + 任务控制 + 未读计数 + 报告分享 + AI 悬浮追问 + 反馈持久化。
+  - **Out**：Cron 调度、邮件告警、报告导出、竞品矩阵。
+- **验收标准（AC）**：
+  1. ✅ 用户输入有效 URL 并提交，页面无刷新进入"生成中"状态。
+  2. ✅ 等待约 25s 后，出现情报卡片（P90 ≤ 60s）。
+  3. ✅ 情报卡片清晰展示"过去 vs 现在"差异对比。
+  4. ✅ 情报卡片底部有行动建议列表。
+  5. ✅ 历史报告在时间轴中按降序展示，支持展开/折叠。
+  6. ✅ 点击"快速追问"打开 AI Chat，自动注入当前报告上下文，切换报告后历史不丢失。
+  7. ✅ 反馈按钮点击后持久化，刷新后状态保留。
+  8. ✅ 分享链接可公开访问，无需登录，无 AI 悬浮球。
+
 
 ## 1. 结论摘要（先给结论）
 

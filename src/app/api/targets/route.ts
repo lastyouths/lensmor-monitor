@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "../../../utils/supabase/server";
 
-export async function GET(req: Request) {
+export async function GET() {
   try {
     const supabase = await createClient();
     const { data: { session } } = await supabase.auth.getSession();
@@ -12,16 +12,27 @@ export async function GET(req: Request) {
 
     const { data: targets, error } = await supabase
       .from('monitor_targets')
-      .select('*, reports(id, is_read)')
+      .select('*')
       .order('created_at', { ascending: false });
 
     if (error) {
       throw error;
     }
 
-    const targetsWithUnread = targets.map((t: any) => ({
+    // 手动获取未读数，避免 foreign key 要求
+    const { data: unreadReports } = await supabase
+      .from('reports')
+      .select('url')
+      .eq('is_read', false);
+
+    const unreadMap = (unreadReports || []).reduce((acc: Record<string, number>, curr: { url: string }) => {
+      acc[curr.url] = (acc[curr.url] || 0) + 1;
+      return acc;
+    }, {});
+
+    const targetsWithUnread = targets.map((t: Record<string, unknown>) => ({
       ...t,
-      unread_count: t.reports?.filter((r: any) => !r.is_read).length || 0
+      unread_count: unreadMap[String(t.url)] || 0
     }));
 
     return NextResponse.json({ targets: targetsWithUnread });
@@ -78,7 +89,7 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const updates: any = {};
+    const updates: Record<string, string> = {};
     if (frequency) updates.frequency = frequency;
     if (status) updates.status = status;
 

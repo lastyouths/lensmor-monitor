@@ -1,15 +1,20 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { ReportCard } from "./ReportCard";
-import { History, ChevronDown, ChevronRight } from "lucide-react";
+import { History, ChevronDown, ChevronRight, Share2 } from "lucide-react";
+import { toast } from "sonner";
 
-export function CompanyTimelineView({ reports, onMarkRead }: { reports: any[], onMarkRead: (id: string) => void }) {
+import { Difference, ActionAdvice, CompanyProfile } from "../app/mock_data";
+
+export type ReportRow = { id: string; is_read: boolean; created_at: string; company_name: string; url: string; summary: string; company_profile: CompanyProfile; differences: Difference[]; advices: ActionAdvice[] };
+
+export function CompanyTimelineView({ reports, onMarkRead }: { reports: ReportRow[], onMarkRead: (id: string) => void }) {
   const latest = reports[0];
   const [expandedId, setExpandedId] = useState<string | null>(latest?.id || null);
 
   // 初始化时，如果最新的一条是未读的，且默认展开了，就自动标记为已读
-  React.useEffect(() => {
+  useEffect(() => {
     if (latest && !latest.is_read && expandedId === latest.id) {
       onMarkRead(latest.id);
     }
@@ -26,6 +31,13 @@ export function CompanyTimelineView({ reports, onMarkRead }: { reports: any[], o
     }
   };
 
+  const onShare = (e: React.MouseEvent, reportId: string) => {
+    e.stopPropagation();
+    const url = `${window.location.origin}/share/${reportId}`;
+    navigator.clipboard.writeText(url);
+    toast.success("分享链接已复制！", { description: "已将情报快照的公开链接复制到剪贴板，可直接发送给他人查看。" });
+  };
+
   if (!latest) return null;
 
   return (
@@ -38,8 +50,8 @@ export function CompanyTimelineView({ reports, onMarkRead }: { reports: any[], o
           {latest.company_name} - 监控时间轴
         </h2>
         <div className="flex flex-col items-end gap-1">
-          <span className="text-xs font-bold tracking-wider uppercase text-indigo-500 bg-indigo-50 px-3 py-1.5 rounded-lg border border-indigo-100/50">
-            {reports.length} Records
+          <span className="text-xs font-bold tracking-wider text-indigo-500 bg-indigo-50 px-3 py-1.5 rounded-lg border border-indigo-100/50">
+            {reports.length} 条记录
           </span>
         </div>
       </div>
@@ -76,13 +88,18 @@ export function CompanyTimelineView({ reports, onMarkRead }: { reports: any[], o
                       {index === 0 ? '✨ 最新情报快照' : '历史情报快照'}
                       {!report.is_read && (
                         <span className="px-2 py-0.5 bg-rose-100 text-rose-600 text-[10px] font-bold uppercase tracking-wider rounded-full border border-rose-200 animate-pulse">
-                          New
+                          未读
                         </span>
                       )}
                     </span>
                   </div>
-                  <div className={`text-slate-400 p-1.5 rounded-full transition-colors ${isExpanded ? 'bg-indigo-50 text-indigo-500' : 'group-hover:text-indigo-400'}`}>
-                    {isExpanded ? <ChevronDown className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
+                  <div className={`text-slate-400 flex items-center gap-1 transition-colors`}>
+                    <button onClick={(e) => onShare(e, report.id)} className="p-1.5 hover:bg-indigo-100 hover:text-indigo-600 rounded-lg transition-colors" title="分享此份情报">
+                      <Share2 className="w-4 h-4" />
+                    </button>
+                    <div className={`p-1.5 rounded-full transition-colors ${isExpanded ? 'bg-indigo-50 text-indigo-500' : 'group-hover:text-indigo-400'}`}>
+                      {isExpanded ? <ChevronDown className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
+                    </div>
                   </div>
                 </div>
 
@@ -90,13 +107,12 @@ export function CompanyTimelineView({ reports, onMarkRead }: { reports: any[], o
                 {isExpanded && (
                   <div className="px-1 sm:px-6 pb-6 border-t border-slate-100/50 pt-4 bg-white/30 backdrop-blur-md">
                     {/* 我们把数据库下划线字段映射回 ReportCard 认识的驼峰字段 */}
-                    <ReportCard data={{
+                    <ReportCard className="mt-2" data={{
+                      id: report.id,
                       companyName: report.company_name,
                       url: report.url,
                       summary: report.summary,
                       companyProfile: report.company_profile,
-                      socialSentiment: report.social_sentiment,
-                      historicalTimeline: report.historical_timeline,
                       differences: report.differences,
                       advices: report.advices
                     }} />
