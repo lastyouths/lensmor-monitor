@@ -49,37 +49,47 @@ const reportSchema = z.object({
   })),
 });
 
-// 抓取页面内容：本地直接 fetch，外部走 Jina（强制无缓存）
+// 抓取页面内容：通过直接请求目标网页提取纯文本，完全抛弃不稳定且有强缓存的 Jina
 async function fetchPageContent(taskId: string, url: string): Promise<string> {
-  if (url.includes("localhost") || url.includes("127.0.0.1")) {
-    console.log(`[${taskId}] 直接 fetch 本地页面: ${url}`);
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`Local fetch failed: ${res.status}`);
-    const html = await res.text();
-    return html
-      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-      .replace(/<img[^>]+alt=["']([^"']+)["'][^>]*/gi, ' [图片: $1] ')
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim()
-      .substring(0, 15000);
-  } else {
-    console.log(`[${taskId}] Jina 抓取外部页面: ${url}`);
-    const jinaController = new AbortController();
-    const jinaTimer = setTimeout(() => jinaController.abort(), 25000); // 25s 硬超时
-    const res = await fetch(`https://r.jina.ai/${url}`, {
-      signal: jinaController.signal,
+  console.log(`[${taskId}] 使用原生 fetch 抓取网页内容: ${url}`);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 20000);
+  
+  try {
+    const res = await fetch(url, {
+      signal: controller.signal,
       headers: {
-        "Accept": "text/markdown",
-        "X-Return-Format": "markdown",
-        "X-No-Cache": "true",
-        "X-Timeout": "25",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache"
       }
     });
-    clearTimeout(jinaTimer);
-    if (!res.ok) throw new Error(`Jina fetch failed: ${res.status}`);
-    return (await res.text()).substring(0, 15000);
+    
+    clearTimeout(timer);
+    
+    if (!res.ok) {
+      throw new Error(`Direct fetch failed: ${res.status}`);
+    }
+    
+    const html = await res.text();
+    
+    // 粗略但有效的 HTML 提取为纯文本
+    return html
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')   // 移除 CSS
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '') // 移除 JS
+      .replace(/<svg[^>]*>[\s\S]*?<\/svg>/gi, '')       // 移除 SVG
+      .replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, '')       // 移除导航栏（往往干扰核心内容）
+      .replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, '') // 移除页脚
+      .replace(/<img[^>]+alt=["']([^"']+)["'][^>]*/gi, ' [图片: $1] ')
+      .replace(/<[^>]+>/g, ' ')                         // 移除所有剩余标签
+      .replace(/\s+/g, ' ')                             // 合并多余空白
+      .trim()
+      .substring(0, 15000);                             // 防爆 token 截断
+      
+  } catch (error) {
+    clearTimeout(timer);
+    throw error;
   }
 }
 
