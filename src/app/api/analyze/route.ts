@@ -222,13 +222,23 @@ async function saveToDatabase(taskId: string, finalData: ReportData, rawContent:
 
       // Step B: UPDATE raw_content（UPDATE 权限已验证可用）
       if (newRow?.id) {
-        const { error: updateError } = await supabase
-          .from('reports')
-          .update({ raw_content: safeRawContent })
-          .eq('id', newRow.id);
+        // 使用 rpc (远程函数) 或者直接用 service_role key 创建的专属 client 确保强行写入
+        // Vercel 上的 supabase js 客户端如果一直拿不到新 schema，就会自动过滤掉 raw_content
+        // 为了绕过 JS 客户端的 schema 检查，我们直接发底层 fetch 请求给 Supabase REST API
+        const patchRes = await fetch(`${supabaseUrl}/rest/v1/reports?id=eq.${newRow.id}`, {
+          method: 'PATCH',
+          headers: {
+            'apikey': supabaseKey,
+            'Authorization': `Bearer ${supabaseKey}`,
+            'Content-Type': 'application/json',
+            'Prefer': 'return=minimal'
+          },
+          body: JSON.stringify({ raw_content: safeRawContent })
+        });
 
-        if (updateError) {
-          console.error(`[${taskId}] raw_content UPDATE 失败:`, updateError.message);
+        if (!patchRes.ok) {
+          const errText = await patchRes.text();
+          console.error(`[${taskId}] raw_content UPDATE 失败:`, patchRes.status, errText);
         } else {
           console.log(`[${taskId}] ✅ raw_content 已写入 (${safeRawContent.length} 字符)`);
         }
@@ -303,9 +313,10 @@ export async function POST(req: Request) {
       taskStore.set(taskId, { status: "pending", data: null });
     }
 
-    processAnalysisTask(taskId, url, previousRawContent, userId).catch(console.error);
+    await processAnalysisTask(taskId, url, previousRawContent, userId);
 
-    return NextResponse.json({ taskId, status: "pending" });
+    const task = taskStore.get(taskId);
+    return NextResponse.json({ taskId, ...(task || { status: "completed" }) });
   } catch {
     return NextResponse.json({ error: "Failed to create task" }, { status: 500 });
   }
