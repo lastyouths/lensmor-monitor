@@ -186,7 +186,7 @@ async function saveToDatabase(taskId: string, finalData: ReportData, rawContent:
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-    console.log(`[${taskId}] 保存到 Supabase...`);
+    console.log(`[${taskId}] 保存到 Supabase... rawContent 长度=${rawContent?.length ?? 'NULL'}, userId=${userId}`);
     const supabase = createSupabaseClient(supabaseUrl, supabaseKey);
 
     const { error: dbError } = await supabase.from('reports').insert({
