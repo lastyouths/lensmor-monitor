@@ -255,6 +255,35 @@ status: implemented
 
 ---
 
+### Task T12: M9 - 真实原文提取与绝对差异比对引擎 (Raw Content Diff)
+- [x] **状态**：完成
+
+**文件：**
+- 修改：`src/app/api/analyze/route.ts`
+- 修改：`src/app/sandbox/page.tsx`
+- 修改：`src/app/sandbox/SandboxEditor.tsx`
+- 修改：`src/app/api/sandbox/route.ts`
+
+**关键点：**
+1. **废弃 Jina 与全面破除缓存**: 
+   - 将抓取逻辑由 Jina 替换为原生的带 Browser UA 的 `fetch` 请求。
+   - 在抓取 URL 后拼接毫秒级时间戳（`?_t=Date.now()`），彻底击穿 Vercel CDN 和 Next.js 的内置网络缓存。
+   - `fetch` 响应后，执行强力的全标签剥离正则（`/<[^>]*>?/gm`）和无用节点（nav/style/script/svg）清洗，仅提取纯净文字与图片 Alt，彻底避免代码格式噪音干扰大模型。
+2. **两阶段原生 Diff 策略**:
+   - 首次采集：抓取源码存入 `raw_content` 建立基准，强制 `differences = []` 且不调起冗余对比。
+   - 二次采集：直接以 `raw_content` 为唯一真理来源进行全文逐字对比（此前基于 Summary 降级的策略已弃用）。
+3. **绕过 PostgREST Schema 失忆 BUG**:
+   - `reports` 表因后期 `ALTER TABLE` 增加了 `raw_content` 列，导致 Supabase JS SDK 长时间缓存无法识别新列而静默置空。
+   - 修复策略：先通过 `insert().select()` 安全插入核心字段获取记录 ID，随后立刻利用生成的 ID 触发一个底层 HTTP PATCH（`fetch`）请求单独回写 `raw_content` 字段，并指定 `SUPABASE_SERVICE_ROLE_KEY` 绕过列权限。
+4. **废除前端导致 Serverless 冻结的死循环轮询**:
+   - 彻底修复“卡在云端调度5分钟”致命 BUG。原因为 Vercel 只要响应结束就会冻结容器环境，导致后台挂起的 AI 任务无法被前端轮询到。
+   - 解决：在 `page.tsx` 触发请求后强制 `await` 等待 API 路由内部调用 OpenAI 完成所有处理再响应。
+5. **Sandbox 完全脱离缓存**:
+   - `page.tsx` 添加 `dynamic = "force-dynamic"`, `revalidate = 0`, `fetchCache = "force-no-store"`。
+   - API `DELETE` 和 `POST` 追加时间戳参数强制刷新 SSR 页面渲染。
+
+---
+
 ## Merge-back 待办清单
 
 无（POC 单分支开发，不涉及 merge-back）。
